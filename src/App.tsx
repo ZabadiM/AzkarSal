@@ -31,9 +31,21 @@ import {
   Sun,
   ArrowUp,
   ArrowDown,
-  Star
+  Star,
+  Share2
 } from 'lucide-react';
 import { DHIKR_LIST as INITIAL_DHIKR_LIST, Dhikr } from './constants';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid
+} from 'recharts';
 
 type DailyStats = {
   [date: string]: {
@@ -262,6 +274,39 @@ export default function App() {
     setCurrentIndex((prev) => (prev - 1 + dhikrList.length) % dhikrList.length);
   };
 
+  const handleShare = async () => {
+    if (!currentDhikr) return;
+    
+    let shareText = currentDhikr.text;
+    if (currentDhikr.virtue) {
+      shareText += `\n\nفضل الذكر: ${currentDhikr.virtue}`;
+    }
+    if (currentDhikr.hadith) {
+      shareText += `\n\n${currentDhikr.hadith}`;
+    }
+    shareText += `\n\n- تمت المشاركة عبر تطبيق المسبحة الإلكترونية`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'ذكر من المسبحة الإلكترونية',
+          text: shareText,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        if (String(error).includes('canceled')) return;
+        console.error('Error sharing:', error);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        alert('تم نسخ الذكر إلى الحافظة!');
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+      }
+    }
+  };
+
   // Timer logic - ONLY counts time when timer is running
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -351,6 +396,30 @@ export default function App() {
 
   // --- Render Statistics View ---
   if (view === 'stats') {
+    const last7DaysData = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const dateStr = getLocalDateStr(d);
+      const dayStats = dailyStats[dateStr] || {};
+      const totalCount = Object.values(dayStats).reduce((acc, curr) => acc + curr.count, 0);
+      return {
+        name: `${d.getDate()}/${d.getMonth() + 1}`,
+        count: totalCount
+      };
+    });
+
+    const last30DaysData = Array.from({ length: 30 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (29 - i));
+      const dateStr = getLocalDateStr(d);
+      const dayStats = dailyStats[dateStr] || {};
+      const totalCount = Object.values(dayStats).reduce((acc, curr) => acc + curr.count, 0);
+      return {
+        name: `${d.getDate()}/${d.getMonth() + 1}`,
+        count: totalCount
+      };
+    });
+
     return (
       <div className="min-h-screen flex flex-col items-center p-6 bg-secondary text-primary overflow-y-auto">
         <header className="w-full max-w-md flex justify-between items-center mb-8">
@@ -384,6 +453,64 @@ export default function App() {
             <StatCard title="هذا الأسبوع" stats={weekStats} icon={<Calendar size={20}/>} />
             <StatCard title="هذا الشهر" stats={monthStats} icon={<BarChart3 size={20}/>} />
             <StatCard title="هذا العام" stats={yearStats} icon={<Award size={20}/>} />
+          </div>
+
+          <div className="bg-surface p-6 rounded-3xl shadow-sm border border-primary/10">
+            <div className="flex items-center gap-3 mb-6 text-primary">
+              <BarChart3 size={20} />
+              <h2 className="text-lg font-bold">نشاط آخر 7 أيام</h2>
+            </div>
+            <div className="h-48 w-full" dir="ltr">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={last7DaysData}>
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'currentColor' }} tickLine={false} axisLine={false} opacity={0.6} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    labelStyle={{ color: '#000', fontWeight: 'bold', marginBottom: '4px' }}
+                    itemStyle={{ color: '#000' }}
+                  />
+                  <Bar dataKey="count" fill="var(--color-accent)" radius={[4, 4, 0, 0]} name="التسبيحات" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-surface p-6 rounded-3xl shadow-sm border border-primary/10">
+            <div className="flex items-center gap-3 mb-6 text-primary">
+              <BarChart3 size={20} />
+              <h2 className="text-lg font-bold">توجه آخر 30 يوم</h2>
+            </div>
+            <div className="h-48 w-full" dir="ltr">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={last30DaysData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.1} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 10, fill: 'currentColor' }} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    opacity={0.6}
+                    interval="preserveStartEnd"
+                    minTickGap={20}
+                  />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    labelStyle={{ color: '#000', fontWeight: 'bold', marginBottom: '4px' }}
+                    itemStyle={{ color: '#000' }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="var(--color-accent)" 
+                    strokeWidth={3} 
+                    dot={false}
+                    activeDot={{ r: 6, fill: 'var(--color-accent)', stroke: '#fff', strokeWidth: 2 }}
+                    name="التسبيحات" 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </main>
       </div>
@@ -494,15 +621,24 @@ export default function App() {
                     >
                       {currentDhikr.text}
                     </h2>
-                    {(currentDhikr.virtue || currentDhikr.hadith) && (
+                    <div className="flex items-center justify-center gap-4 mt-2">
+                      {(currentDhikr.virtue || currentDhikr.hadith) && (
+                        <button 
+                          onClick={() => setShowVirtue(!showVirtue)}
+                          className="inline-flex items-center gap-1 text-xs text-primary/60 hover:text-primary transition-colors"
+                        >
+                          <BookOpen size={14} />
+                          <span>فضل الذكر</span>
+                        </button>
+                      )}
                       <button 
-                        onClick={() => setShowVirtue(!showVirtue)}
+                        onClick={handleShare}
                         className="inline-flex items-center gap-1 text-xs text-primary/60 hover:text-primary transition-colors"
                       >
-                        <BookOpen size={14} />
-                        <span>فضل الذكر</span>
+                        <Share2 size={14} />
+                        <span>مشاركة</span>
                       </button>
-                    )}
+                    </div>
                   </motion.div>
                 </AnimatePresence>
               </div>
@@ -528,9 +664,14 @@ export default function App() {
                   >
                     <div className="flex justify-between items-start">
                       <h3 className="text-xl font-bold font-serif">فضل هذا الذكر</h3>
-                      <button onClick={() => setShowVirtue(false)} className="text-primary/40 hover:text-primary">
-                        <RotateCcw size={20} className="rotate-45" />
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button onClick={handleShare} className="text-primary/40 hover:text-primary transition-colors" title="مشاركة">
+                          <Share2 size={20} />
+                        </button>
+                        <button onClick={() => setShowVirtue(false)} className="text-primary/40 hover:text-primary transition-colors">
+                          <RotateCcw size={20} className="rotate-45" />
+                        </button>
+                      </div>
                     </div>
                     {currentDhikr.virtue && (
                       <p className="text-lg text-primary font-medium leading-relaxed">
