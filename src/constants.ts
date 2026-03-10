@@ -6,6 +6,7 @@ export interface Dhikr {
   hadith: string;
   target?: number;
   step?: number;
+  isFavorite?: boolean;
 }
 
 export const DHIKR_LIST: Dhikr[] = [

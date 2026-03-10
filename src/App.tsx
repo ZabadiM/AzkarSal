@@ -28,7 +28,10 @@ import {
   Edit2,
   Save,
   Moon,
-  Sun
+  Sun,
+  ArrowUp,
+  ArrowDown,
+  Star
 } from 'lucide-react';
 import { DHIKR_LIST as INITIAL_DHIKR_LIST, Dhikr } from './constants';
 
@@ -74,6 +77,7 @@ export default function App() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showVirtue, setShowVirtue] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [listFilter, setListFilter] = useState<'all' | 'favorites'>('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('tasbih_dark_mode');
@@ -540,8 +544,24 @@ export default function App() {
                       <X size={24} />
                     </button>
                   </div>
+                  <div className="flex p-4 pb-0 gap-2">
+                    <button 
+                      onClick={() => setListFilter('all')}
+                      className={`flex-1 py-2 rounded-xl font-medium transition-colors ${listFilter === 'all' ? 'bg-primary text-secondary' : 'bg-primary/5 text-primary/60 hover:bg-primary/10'}`}
+                    >
+                      الكل
+                    </button>
+                    <button 
+                      onClick={() => setListFilter('favorites')}
+                      className={`flex-1 py-2 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${listFilter === 'favorites' ? 'bg-primary text-secondary' : 'bg-primary/5 text-primary/60 hover:bg-primary/10'}`}
+                    >
+                      <Star size={16} fill={listFilter === 'favorites' ? "currentColor" : "none"} /> المفضلة
+                    </button>
+                  </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {dhikrList.map((dhikr, idx) => {
+                      if (listFilter === 'favorites' && !dhikr.isFavorite) return null;
+                      
                       const dhikrToday = dailyStats[todayStr]?.[dhikr.id];
                       const dhikrCount = dhikrToday?.count || 0;
                       const dhikrTime = dhikrToday?.timeSpent || 0;
@@ -549,55 +569,68 @@ export default function App() {
                       const isCompleted = dhikr.target && dhikrCount >= dhikr.target;
                       
                       return (
-                        <button
-                          key={dhikr.id}
-                          onClick={() => {
-                            setCurrentIndex(idx);
-                            setShowList(false);
-                          }}
-                          className={`w-full text-right p-4 rounded-2xl border transition-all ${
-                            isSelected 
-                              ? 'bg-primary text-secondary border-primary shadow-lg' 
-                              : 'bg-surface text-primary border-primary/10 hover:border-primary/30 shadow-sm'
-                          }`}
-                        >
-                          <h3 className={`text-xl font-serif arabic-text mb-3 ${isSelected ? 'text-secondary' : 'text-primary'}`}>
-                            {dhikr.text}
-                          </h3>
-                          <div className={`flex flex-col gap-1 text-sm ${isSelected ? 'text-secondary/80' : 'text-primary/60'}`}>
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium">
-                                الإنجاز: {dhikrCount} {dhikr.target ? `/ ${dhikr.target}` : ''}
-                              </span>
-                              {isCompleted && (
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isSelected ? 'bg-surface/20 text-secondary' : 'bg-green-500/10 text-green-600'}`}>
-                                  مكتمل
-                                </span>
+                        <div key={dhikr.id} className="relative">
+                          <button
+                            onClick={() => {
+                              setCurrentIndex(idx);
+                              setShowList(false);
+                            }}
+                            className={`w-full text-right p-4 rounded-2xl border transition-all ${
+                              isSelected 
+                                ? 'bg-primary text-secondary border-primary shadow-lg' 
+                                : 'bg-surface text-primary border-primary/10 hover:border-primary/30 shadow-sm'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start mb-3">
+                              <h3 className={`text-xl font-serif arabic-text ${isSelected ? 'text-secondary' : 'text-primary'}`}>
+                                {dhikr.text}
+                              </h3>
+                              {dhikr.isFavorite && (
+                                <Star size={18} className={isSelected ? 'text-yellow-300' : 'text-yellow-500'} fill="currentColor" />
                               )}
                             </div>
-                            <span className="text-xs opacity-80">
-                              الوقت: {formatDuration(dhikrTime)}
-                            </span>
-                          </div>
-                          <div className="mt-3 flex flex-col gap-2">
-                            {/* Counter Progress Bar */}
-                            <div className={`w-full h-1.5 rounded-full overflow-hidden ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-green-500' : (isSelected ? 'bg-secondary' : 'bg-primary')}`} 
-                                style={{ width: `${Math.min(100, dhikr.target ? (dhikrCount / dhikr.target) * 100 : (dhikrCount % (dhikr.step || 100)) === 0 && dhikrCount > 0 ? 100 : ((dhikrCount % (dhikr.step || 100)) / (dhikr.step || 100)) * 100)}%` }}
-                              />
+                            <div className={`flex flex-col gap-1 text-sm ${isSelected ? 'text-secondary/80' : 'text-primary/60'}`}>
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium">
+                                  الإنجاز: {dhikrCount} {dhikr.target ? `/ ${dhikr.target}` : ''}
+                                </span>
+                                {isCompleted && (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isSelected ? 'bg-surface/20 text-secondary' : 'bg-green-500/10 text-green-600'}`}>
+                                    مكتمل
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs opacity-80">
+                                الوقت: {formatDuration(dhikrTime)}
+                              </span>
                             </div>
-                            {/* Timer Progress Bar */}
-                            <div className={`w-full h-1.5 rounded-full overflow-hidden ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${dhikrTime >= 300 ? 'bg-green-500' : (isSelected ? 'bg-secondary/70' : 'bg-accent')}`} 
-                                style={{ width: `${Math.min(100, (dhikrTime / 300) * 100)}%` }}
-                              />
+                            <div className="mt-3 flex flex-col gap-2">
+                              {/* Counter Progress Bar */}
+                              <div className={`w-full h-1.5 rounded-full overflow-hidden ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-green-500' : (isSelected ? 'bg-secondary' : 'bg-primary')}`} 
+                                  style={{ width: `${Math.min(100, dhikr.target ? (dhikrCount / dhikr.target) * 100 : (dhikrCount % (dhikr.step || 100)) === 0 && dhikrCount > 0 ? 100 : ((dhikrCount % (dhikr.step || 100)) / (dhikr.step || 100)) * 100)}%` }}
+                                />
+                              </div>
+                              {/* Timer Progress Bar */}
+                              <div className={`w-full h-1.5 rounded-full overflow-hidden ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-500 ${dhikrTime >= 300 ? 'bg-green-500' : (isSelected ? 'bg-secondary/70' : 'bg-accent')}`} 
+                                  style={{ width: `${Math.min(100, (dhikrTime / 300) * 100)}%` }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        </button>
+                          </button>
+                        </div>
                       );
                     })}
+                    {listFilter === 'favorites' && !dhikrList.some(d => d.isFavorite) && (
+                      <div className="text-center py-12 text-primary/50">
+                        <Star size={48} className="mx-auto mb-4 opacity-20" />
+                        <p>لا توجد أذكار مفضلة حتى الآن</p>
+                        <p className="text-sm mt-2">يمكنك إضافة الأذكار للمفضلة من شاشة الإدارة</p>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -811,6 +844,28 @@ function ManageDhikrView({
     setShowResetConfirm(false);
   };
 
+  const moveUp = (index: number) => {
+    if (index === 0) return;
+    setDhikrList(prev => {
+      const newList = [...prev];
+      [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
+      return newList;
+    });
+  };
+
+  const moveDown = (index: number) => {
+    if (index === dhikrList.length - 1) return;
+    setDhikrList(prev => {
+      const newList = [...prev];
+      [newList[index + 1], newList[index]] = [newList[index], newList[index + 1]];
+      return newList;
+    });
+  };
+
+  const toggleFavorite = (id: string) => {
+    setDhikrList(prev => prev.map(d => d.id === id ? { ...d, isFavorite: !d.isFavorite } : d));
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center p-6 bg-secondary text-primary overflow-y-auto">
       <header className="w-full max-w-md flex justify-between items-center mb-8">
@@ -823,6 +878,98 @@ function ManageDhikrView({
       <main className="w-full max-w-md flex flex-col gap-4 pb-8 relative">
         {/* Modals */}
         <AnimatePresence>
+          {editingId && (
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-surface p-6 rounded-3xl max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold font-serif">{formData.id?.startsWith('custom_') ? 'إضافة ذكر جديد' : 'تعديل الذكر'}</h3>
+                  <button onClick={() => setEditingId(null)} className="p-2 rounded-full hover:bg-black/5 transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-primary/80 mb-1">نص الذكر *</label>
+                    <input 
+                      type="text" 
+                      value={formData.text || ''}
+                      onChange={e => setFormData({...formData, text: e.target.value})}
+                      className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-serif arabic-text text-lg transition-all"
+                      dir="rtl"
+                      placeholder="أدخل نص الذكر هنا..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-primary/80 mb-1">الهدف (اختياري)</label>
+                      <input 
+                        type="number" 
+                        value={formData.target || ''}
+                        onChange={e => setFormData({...formData, target: parseInt(e.target.value) || undefined})}
+                        className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                        dir="ltr"
+                        placeholder="مثال: 100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-primary/80 mb-1">القسم (اختياري)</label>
+                      <input 
+                        type="number" 
+                        value={formData.step || ''}
+                        onChange={e => setFormData({...formData, step: parseInt(e.target.value) || undefined})}
+                        className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                        dir="ltr"
+                        placeholder="مثال: 33"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/80 mb-1">الفضل (اختياري)</label>
+                    <input 
+                      type="text" 
+                      value={formData.virtue || ''}
+                      onChange={e => setFormData({...formData, virtue: e.target.value})}
+                      className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                      dir="rtl"
+                      placeholder="فضل هذا الذكر..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/80 mb-1">الحديث (اختياري)</label>
+                    <textarea 
+                      value={formData.hadith || ''}
+                      onChange={e => setFormData({...formData, hadith: e.target.value})}
+                      className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary min-h-[100px] resize-y transition-all"
+                      dir="rtl"
+                      placeholder="نص الحديث الشريف..."
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4 mt-2 border-t border-primary/10">
+                    <button 
+                      onClick={handleSave}
+                      className="flex-1 flex justify-center items-center gap-2 py-3 bg-primary text-secondary rounded-xl font-medium hover:bg-primary/90 transition-colors shadow-md"
+                    >
+                      <Save size={18} /> حفظ الذكر
+                    </button>
+                    <button 
+                      onClick={() => setEditingId(null)}
+                      className="flex-1 py-3 bg-primary/5 text-primary rounded-xl font-medium hover:bg-primary/10 transition-colors"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
           {showResetConfirm && (
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -896,83 +1043,36 @@ function ManageDhikrView({
           </button>
         </div>
 
-        {editingId && (
-          <div className="bg-surface p-4 rounded-2xl shadow-lg border border-primary/20 mb-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-primary/80 mb-1">نص الذكر *</label>
-              <input 
-                type="text" 
-                value={formData.text || ''}
-                onChange={e => setFormData({...formData, text: e.target.value})}
-                className="w-full p-2 border border-primary/20 rounded-lg bg-secondary/50 focus:outline-none focus:border-primary font-serif arabic-text text-lg"
-                dir="rtl"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary/80 mb-1">الهدف (اختياري)</label>
-              <input 
-                type="number" 
-                value={formData.target || ''}
-                onChange={e => setFormData({...formData, target: parseInt(e.target.value) || undefined})}
-                className="w-full p-2 border border-primary/20 rounded-lg bg-secondary/50 focus:outline-none focus:border-primary"
-                dir="ltr"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary/80 mb-1">القسم / التجزئة (اختياري)</label>
-              <input 
-                type="number" 
-                value={formData.step || ''}
-                onChange={e => setFormData({...formData, step: parseInt(e.target.value) || undefined})}
-                className="w-full p-2 border border-primary/20 rounded-lg bg-secondary/50 focus:outline-none focus:border-primary"
-                dir="ltr"
-                placeholder="مثال: 33"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary/80 mb-1">الفضل (اختياري)</label>
-              <input 
-                type="text" 
-                value={formData.virtue || ''}
-                onChange={e => setFormData({...formData, virtue: e.target.value})}
-                className="w-full p-2 border border-primary/20 rounded-lg bg-secondary/50 focus:outline-none focus:border-primary"
-                dir="rtl"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary/80 mb-1">الحديث (اختياري)</label>
-              <textarea 
-                value={formData.hadith || ''}
-                onChange={e => setFormData({...formData, hadith: e.target.value})}
-                className="w-full p-2 border border-primary/20 rounded-lg bg-secondary/50 focus:outline-none focus:border-primary min-h-[80px]"
-                dir="rtl"
-              />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button 
-                onClick={handleSave}
-                className="flex-1 flex justify-center items-center gap-2 py-2 bg-primary text-secondary rounded-lg font-medium"
-              >
-                <Save size={18} /> حفظ
-              </button>
-              <button 
-                onClick={() => setEditingId(null)}
-                className="flex-1 py-2 bg-primary/10 text-primary rounded-lg font-medium"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="space-y-3">
-          {dhikrList.map(dhikr => (
+          {dhikrList.map((dhikr, index) => (
             <div key={dhikr.id} className="bg-surface p-4 rounded-2xl shadow-sm border border-primary/10 flex justify-between items-center">
-              <div className="flex-1 ml-4">
+              <div className="flex flex-col gap-1 ml-2">
+                <button 
+                  onClick={() => moveUp(index)}
+                  disabled={index === 0}
+                  className={`p-1 rounded-md transition-colors ${index === 0 ? 'text-primary/20 cursor-not-allowed' : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
+                >
+                  <ArrowUp size={16} />
+                </button>
+                <button 
+                  onClick={() => moveDown(index)}
+                  disabled={index === dhikrList.length - 1}
+                  className={`p-1 rounded-md transition-colors ${index === dhikrList.length - 1 ? 'text-primary/20 cursor-not-allowed' : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
+                >
+                  <ArrowDown size={16} />
+                </button>
+              </div>
+              <div className="flex-1 ml-2">
                 <h3 className="text-lg font-serif arabic-text text-primary">{dhikr.text}</h3>
                 {dhikr.target && <span className="text-xs text-primary/60">الهدف: {dhikr.target}</span>}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1">
+                <button 
+                  onClick={() => toggleFavorite(dhikr.id)}
+                  className={`p-2 rounded-lg transition-colors ${dhikr.isFavorite ? 'text-yellow-500 hover:bg-yellow-500/10' : 'text-primary/40 hover:text-primary/60 hover:bg-primary/5'}`}
+                >
+                  <Star size={18} fill={dhikr.isFavorite ? "currentColor" : "none"} />
+                </button>
                 <button 
                   onClick={() => handleEdit(dhikr)}
                   className="p-2 text-primary/60 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
