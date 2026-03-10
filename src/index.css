@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Amiri", serif;
+  
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-surface: var(--surface);
+}
+
+:root {
+  --primary: #5A5A40; /* Olive */
+  --secondary: #f5f5f0; /* Warm off-white */
+  --accent: #D4A373; /* Sand */
+  --surface: #ffffff; /* White */
+}
+
+.dark {
+  --primary: #E4E3D3; /* Light olive/sand for text/icons */
+  --secondary: #1A1A14; /* Dark background */
+  --accent: #D4A373; /* Sand */
+  --surface: #2A2A22; /* Dark olive-gray for cards */
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-secondary);
+  color: var(--color-primary);
+  direction: rtl;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.arabic-text {
+  font-family: var(--font-serif);
+}
+
+/* Custom scrollbar for a cleaner look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  opacity: 0.3;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+  opacity: 0.5;
+}
+
