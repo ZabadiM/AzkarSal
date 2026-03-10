@@ -79,6 +79,10 @@ export default function App() {
   const [showList, setShowList] = useState(false);
   const [listFilter, setListFilter] = useState<'all' | 'favorites'>('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [fontSize, setFontSize] = useState(() => {
+    const saved = localStorage.getItem('tasbih_font_size');
+    return saved ? parseInt(saved, 10) : 36;
+  });
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('tasbih_dark_mode');
     if (saved !== null) return JSON.parse(saved);
@@ -144,6 +148,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tasbih_list', JSON.stringify(dhikrList));
   }, [dhikrList]);
+
+  useEffect(() => {
+    localStorage.setItem('tasbih_font_size', fontSize.toString());
+  }, [fontSize]);
 
   // Ensure currentIndex is valid if list changes
   useEffect(() => {
@@ -449,6 +457,22 @@ export default function App() {
           </div>
         ) : (
           <>
+            <div className="flex justify-center gap-4 w-full mb-[-1rem] z-10 relative">
+              <button 
+                onClick={() => setFontSize(f => Math.min(f + 4, 72))} 
+                className="p-2 text-primary/40 hover:text-primary/80 transition-colors font-bold text-lg rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                title="تكبير الخط"
+              >
+                A+
+              </button>
+              <button 
+                onClick={() => setFontSize(f => Math.max(f - 4, 16))} 
+                className="p-2 text-primary/40 hover:text-primary/80 transition-colors font-bold text-sm rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                title="تصغير الخط"
+              >
+                A-
+              </button>
+            </div>
             {/* Dhikr Selector */}
             <div className="w-full flex items-center justify-between gap-4">
               <button onClick={prevDhikr} className="p-2 rounded-full hover:bg-black/5 transition-colors">
@@ -464,7 +488,10 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                     className="space-y-2"
                   >
-                    <h2 className="text-3xl md:text-4xl font-serif arabic-text leading-relaxed">
+                    <h2 
+                      className="font-serif arabic-text leading-relaxed transition-all duration-300"
+                      style={{ fontSize: `${fontSize}px`, lineHeight: 1.6 }}
+                    >
                       {currentDhikr.text}
                     </h2>
                     {(currentDhikr.virtue || currentDhikr.hadith) && (
