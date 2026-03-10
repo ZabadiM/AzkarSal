@@ -104,15 +104,24 @@ export default function App() {
   const currentDhikr = dhikrList[currentIndex] || dhikrList[0];
   const todayStr = getTodayStr();
   const currentCount = dailyStats[todayStr]?.[currentDhikr?.id]?.count || 0;
+  const currentTimeSpent = dailyStats[todayStr]?.[currentDhikr?.id]?.timeSpent || 0;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Progress calculations
+  // Progress calculations for counter
   const step = currentDhikr?.step || currentDhikr?.target || 100;
-  const progressValue = currentCount % step;
-  const progressPercentage = currentCount === 0 ? 0 : (progressValue === 0 ? 100 : (progressValue / step) * 100);
+  const counterProgressValue = currentCount % step;
+  const counterProgressPercentage = currentCount === 0 ? 0 : (counterProgressValue === 0 ? 100 : (counterProgressValue / step) * 100);
+  const isCounterComplete = currentCount > 0 && counterProgressValue === 0;
+  
+  // Progress calculations for timer (assuming a target of 5 minutes (300 seconds) per dhikr if not specified)
+  const timerTarget = 300; // 5 minutes default target
+  const timerProgressPercentage = Math.min(100, (currentTimeSpent / timerTarget) * 100);
+  const isTimerComplete = currentTimeSpent >= timerTarget;
+
   const circleRadius = 136;
   const circleCircumference = 2 * Math.PI * circleRadius;
-  const strokeDashoffset = circleCircumference - (progressPercentage / 100) * circleCircumference;
+  const counterStrokeDashoffset = circleCircumference - (counterProgressPercentage / 100) * circleCircumference;
+  const timerStrokeDashoffset = circleCircumference - (timerProgressPercentage / 100) * circleCircumference;
 
   // Save data to local storage
   useEffect(() => {
@@ -570,6 +579,22 @@ export default function App() {
                               الوقت: {formatDuration(dhikrTime)}
                             </span>
                           </div>
+                          <div className="mt-3 flex flex-col gap-2">
+                            {/* Counter Progress Bar */}
+                            <div className={`w-full h-1.5 rounded-full overflow-hidden ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-green-500' : (isSelected ? 'bg-secondary' : 'bg-primary')}`} 
+                                style={{ width: `${Math.min(100, dhikr.target ? (dhikrCount / dhikr.target) * 100 : (dhikrCount % (dhikr.step || 100)) === 0 && dhikrCount > 0 ? 100 : ((dhikrCount % (dhikr.step || 100)) / (dhikr.step || 100)) * 100)}%` }}
+                              />
+                            </div>
+                            {/* Timer Progress Bar */}
+                            <div className={`w-full h-1.5 rounded-full overflow-hidden ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${dhikrTime >= 300 ? 'bg-green-500' : (isSelected ? 'bg-secondary/70' : 'bg-accent')}`} 
+                                style={{ width: `${Math.min(100, (dhikrTime / 300) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
                         </button>
                       );
                     })}
@@ -609,6 +634,7 @@ export default function App() {
 
               <div className="relative w-72 h-72 flex items-center justify-center">
                 <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 288 288">
+                  {/* Background Circle */}
                   <circle
                     cx="144"
                     cy="144"
@@ -618,6 +644,22 @@ export default function App() {
                     strokeWidth="8"
                     className="text-primary/10"
                   />
+                  {/* Timer Progress Circle (Inner) */}
+                  <motion.circle
+                    cx="144"
+                    cy="144"
+                    r="124"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    className={isTimerComplete ? "text-green-500" : "text-accent"}
+                    initial={{ strokeDashoffset: 2 * Math.PI * 124 }}
+                    animate={{ strokeDashoffset: 2 * Math.PI * 124 - (timerProgressPercentage / 100) * (2 * Math.PI * 124) }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    style={{ strokeDasharray: 2 * Math.PI * 124 }}
+                  />
+                  {/* Counter Progress Circle (Outer) */}
                   <motion.circle
                     cx="144"
                     cy="144"
@@ -626,9 +668,9 @@ export default function App() {
                     stroke="currentColor"
                     strokeWidth="8"
                     strokeLinecap="round"
-                    className="text-primary"
+                    className={isCounterComplete ? "text-green-500" : "text-primary"}
                     initial={{ strokeDashoffset: circleCircumference }}
-                    animate={{ strokeDashoffset }}
+                    animate={{ strokeDashoffset: counterStrokeDashoffset }}
                     transition={{ duration: 0.3, ease: "easeOut" }}
                     style={{ strokeDasharray: circleCircumference }}
                   />
@@ -646,7 +688,7 @@ export default function App() {
                     <span className="text-sm text-primary/40 uppercase tracking-widest">اضغط للتسبيح</span>
                     {currentDhikr.step && currentDhikr.target && currentDhikr.step !== currentDhikr.target && (
                       <span className="text-xs text-primary/60 mt-1 font-medium bg-primary/5 px-2 py-1 rounded-full">
-                        القسم: {progressValue === 0 && currentCount > 0 ? step : progressValue} / {step}
+                        القسم: {counterProgressValue === 0 && currentCount > 0 ? step : counterProgressValue} / {step}
                       </span>
                     )}
                   </div>
