@@ -75,3 +75,8 @@ body {
   opacity: 0.5;
 }
 
+/* Fix Recharts focus outline (black box on click) */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}

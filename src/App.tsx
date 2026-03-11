@@ -84,6 +84,15 @@ const formatTime = (seconds: number) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
+const normalizeArabic = (text: string) => {
+  return text
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '') // Remove Tashkeel
+    .replace(/[أإآ]/g, 'ا') // Normalize Alef
+    .replace(/ة/g, 'ه') // Normalize Taa Marbuta
+    .replace(/ى/g, 'ي'); // Normalize Alef Maksura
+};
+
 export default function App() {
   const [view, setView] = useState<'main' | 'stats' | 'manage'>('main');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -564,7 +573,7 @@ export default function App() {
                 <BarChart data={last7DaysData}>
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'currentColor' }} tickLine={false} axisLine={false} opacity={0.6} />
                   <Tooltip 
-                    cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                    cursor={{ fill: 'var(--color-primary)', opacity: 0.05 }}
                     contentStyle={{ borderRadius: '16px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', backgroundColor: 'var(--color-surface)' }}
                     labelStyle={{ color: 'var(--color-primary)', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: 'var(--color-primary)' }}
@@ -594,6 +603,7 @@ export default function App() {
                     minTickGap={20}
                   />
                   <Tooltip 
+                    cursor={{ stroke: 'var(--color-primary)', strokeWidth: 1, opacity: 0.2, strokeDasharray: '3 3' }}
                     contentStyle={{ borderRadius: '16px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', backgroundColor: 'var(--color-surface)' }}
                     labelStyle={{ color: 'var(--color-primary)', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: 'var(--color-primary)' }}
@@ -917,7 +927,7 @@ export default function App() {
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {dhikrList.map((dhikr, idx) => {
                       if (listFilter === 'favorites' && !dhikr.isFavorite) return null;
-                      if (searchTerm && !dhikr.text.includes(searchTerm)) return null;
+                      if (searchTerm && !normalizeArabic(dhikr.text).includes(normalizeArabic(searchTerm))) return null;
                       
                       const dhikrToday = dailyStats[todayStr]?.[dhikr.id];
                       const dhikrCount = dhikrToday?.count || 0;
@@ -989,7 +999,7 @@ export default function App() {
                         <p className="text-sm mt-2">يمكنك إضافة الأذكار للمفضلة من شاشة الإدارة</p>
                       </div>
                     )}
-                    {searchTerm && !dhikrList.some(d => d.text.includes(searchTerm)) && (
+                    {searchTerm && !dhikrList.some(d => normalizeArabic(d.text).includes(normalizeArabic(searchTerm))) && (
                       <div className="text-center py-12 text-primary/50">
                         <Search size={48} className="mx-auto mb-4 opacity-20" />
                         <p>لا توجد نتائج مطابقة للبحث</p>
