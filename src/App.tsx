@@ -34,7 +34,8 @@ import {
   Star,
   Share2,
   ImageIcon,
-  Search
+  Search,
+  FastForward
 } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { DHIKR_LIST as INITIAL_DHIKR_LIST, Dhikr } from './constants';
@@ -118,6 +119,10 @@ export default function App() {
     if (saved !== null) return JSON.parse(saved);
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+  const [autoAdvance, setAutoAdvance] = useState(() => {
+    const saved = localStorage.getItem('tasbih_auto_advance');
+    return saved ? JSON.parse(saved) : false;
+  });
   
   // Custom Dhikr List
   const [dhikrList, setDhikrList] = useState<Dhikr[]>(() => {
@@ -182,6 +187,43 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tasbih_font_size', fontSize.toString());
   }, [fontSize]);
+
+  useEffect(() => {
+    localStorage.setItem('tasbih_auto_advance', JSON.stringify(autoAdvance));
+  }, [autoAdvance]);
+
+  const prevCountRef = useRef(currentCount);
+  const prevTimeRef = useRef(currentTimeSpent);
+
+  useEffect(() => {
+    if (autoAdvance && mode === 'counter') {
+      if (currentCount > 0 && currentCount !== prevCountRef.current) {
+        const step = currentDhikr?.step || currentDhikr?.target || 100;
+        if (currentCount % step === 0) {
+          const timeout = setTimeout(() => {
+            setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
+          }, 800);
+          return () => clearTimeout(timeout);
+        }
+      }
+    }
+    prevCountRef.current = currentCount;
+  }, [currentCount, autoAdvance, mode, currentDhikr, dhikrList.length]);
+
+  useEffect(() => {
+    if (autoAdvance && mode === 'timer') {
+      if (currentTimeSpent > 0 && currentTimeSpent !== prevTimeRef.current) {
+        const timerTarget = 300;
+        if (currentTimeSpent === timerTarget) {
+          const timeout = setTimeout(() => {
+            setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
+          }, 800);
+          return () => clearTimeout(timeout);
+        }
+      }
+    }
+    prevTimeRef.current = currentTimeSpent;
+  }, [currentTimeSpent, autoAdvance, mode, dhikrList.length]);
 
   // Ensure currentIndex is valid if list changes
   useEffect(() => {
@@ -679,6 +721,13 @@ export default function App() {
         </div>
         <div className="flex gap-1 sm:gap-2">
           <button 
+            onClick={() => setAutoAdvance(!autoAdvance)}
+            className={`p-2.5 rounded-xl transition-colors ${autoAdvance ? 'bg-primary/10 text-primary' : 'hover:bg-primary/10 text-primary/60'}`}
+            title={autoAdvance ? 'إيقاف الانتقال التلقائي' : 'تفعيل الانتقال التلقائي'}
+          >
+            <FastForward size={20} />
+          </button>
+          <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
             title={isDarkMode ? 'الوضع النهاري' : 'الوضع الليلي'}
@@ -688,6 +737,7 @@ export default function App() {
           <button 
             onClick={() => setSoundEnabled(!soundEnabled)}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
+            title={soundEnabled ? 'إيقاف الصوت' : 'تفعيل الصوت'}
           >
             {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
