@@ -32,8 +32,10 @@ import {
   ArrowUp,
   ArrowDown,
   Star,
-  Share2
+  Share2,
+  Image as ImageIcon
 } from 'lucide-react';
+import { toBlob } from 'html-to-image';
 import { DHIKR_LIST as INITIAL_DHIKR_LIST, Dhikr } from './constants';
 import {
   BarChart,
@@ -88,6 +90,10 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showVirtue, setShowVirtue] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [shareImageBlob, setShareImageBlob] = useState<Blob | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
   const [showList, setShowList] = useState(false);
   const [listFilter, setListFilter] = useState<'all' | 'favorites'>('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -274,7 +280,7 @@ export default function App() {
     setCurrentIndex((prev) => (prev - 1 + dhikrList.length) % dhikrList.length);
   };
 
-  const handleShare = async () => {
+  const handleShareText = async () => {
     if (!currentDhikr) return;
     
     let shareText = currentDhikr.text;
@@ -284,12 +290,12 @@ export default function App() {
     if (currentDhikr.hadith) {
       shareText += `\n\n${currentDhikr.hadith}`;
     }
-    shareText += `\n\n- تمت المشاركة عبر تطبيق المسبحة الإلكترونية`;
+    shareText += `\n\n- تمت المشاركة عن طريق تطبيق AzkarSal`;
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'ذكر من المسبحة الإلكترونية',
+          title: 'ذكر من تطبيق AzkarSal',
           text: shareText,
         });
       } catch (error) {
@@ -305,7 +311,90 @@ export default function App() {
         console.error('Error copying to clipboard:', error);
       }
     }
+    setShowShareMenu(false);
   };
+
+  const handleShareImage = async () => {
+    if (!shareImageBlob) {
+      if (isGeneratingImage) {
+        alert('جاري تجهيز الصورة، يرجى الانتظار قليلاً...');
+      } else {
+        alert('عذراً، حدث خطأ أثناء تجهيز الصورة');
+      }
+      return;
+    }
+
+    const file = new File([shareImageBlob], 'dhikr.png', { type: 'image/png' });
+
+    let shared = false;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: 'ذكر من تطبيق AzkarSal',
+          files: [file],
+        });
+        shared = true;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          setShowShareMenu(false);
+          return;
+        }
+        console.error('Share API failed:', error);
+      }
+    }
+    
+    if (!shared) {
+      const url = URL.createObjectURL(shareImageBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dhikr.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    
+    setShowShareMenu(false);
+  };
+
+  useEffect(() => {
+    if (showShareMenu && shareRef.current && currentDhikr) {
+      const generateImage = async () => {
+        setIsGeneratingImage(true);
+        try {
+          const watermark = shareRef.current?.querySelector('#watermark');
+          if (watermark) watermark.classList.remove('hidden');
+
+          // Small delay to ensure layout is updated
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          const blob = await toBlob(shareRef.current!, {
+            backgroundColor: document.documentElement.classList.contains('dark') ? '#121212' : '#f5f5f0',
+            pixelRatio: 2,
+            filter: (node) => {
+              // Filter out elements with data-html2canvas-ignore
+              if (node instanceof HTMLElement && node.dataset.html2canvasIgnore !== undefined) {
+                return false;
+              }
+              return true;
+            }
+          });
+          
+          if (watermark) watermark.classList.add('hidden');
+
+          setShareImageBlob(blob);
+        } catch (error) {
+          console.error('Error generating image:', error);
+          setShareImageBlob(null);
+        } finally {
+          setIsGeneratingImage(false);
+        }
+      };
+      generateImage();
+    } else if (!showShareMenu) {
+      setShareImageBlob(null);
+    }
+  }, [showShareMenu, currentDhikr]);
 
   // Timer logic - ONLY counts time when timer is running
   useEffect(() => {
@@ -613,7 +702,8 @@ export default function App() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="space-y-2"
+                    className="space-y-2 p-4 rounded-xl"
+                    ref={shareRef}
                   >
                     <h2 
                       className="font-serif arabic-text leading-relaxed transition-all duration-300"
@@ -621,7 +711,10 @@ export default function App() {
                     >
                       {currentDhikr.text}
                     </h2>
-                    <div className="flex items-center justify-center gap-4 mt-2">
+                    <div id="watermark" className="hidden mt-6 pt-4 border-t border-primary/10">
+                      <p className="text-sm font-medium text-primary/60">تمت المشاركة عن طريق تطبيق AzkarSal</p>
+                    </div>
+                    <div className="flex items-center justify-center gap-4 mt-2" data-html2canvas-ignore>
                       {(currentDhikr.virtue || currentDhikr.hadith) && (
                         <button 
                           onClick={() => setShowVirtue(!showVirtue)}
@@ -632,7 +725,7 @@ export default function App() {
                         </button>
                       )}
                       <button 
-                        onClick={handleShare}
+                        onClick={() => setShowShareMenu(true)}
                         className="inline-flex items-center gap-1 text-xs text-primary/60 hover:text-primary transition-colors"
                       >
                         <Share2 size={14} />
@@ -647,6 +740,48 @@ export default function App() {
                 <ChevronLeft size={24} />
               </button>
             </div>
+
+            {/* Share Menu Modal */}
+            <AnimatePresence>
+              {showShareMenu && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+                  onClick={() => setShowShareMenu(false)}
+                >
+                  <motion.div 
+                    className="bg-surface rounded-3xl p-6 max-w-xs w-full shadow-2xl space-y-4 text-center"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <h3 className="text-lg font-bold font-serif mb-4">خيارات المشاركة</h3>
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={handleShareText}
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-colors font-medium"
+                      >
+                        <Share2 size={18} />
+                        مشاركة كنص
+                      </button>
+                      <button 
+                        onClick={handleShareImage}
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-primary text-secondary hover:bg-primary/90 rounded-xl transition-colors font-medium"
+                      >
+                        <ImageIcon size={18} />
+                        مشاركة كصورة
+                      </button>
+                    </div>
+                    <button 
+                      onClick={() => setShowShareMenu(false)}
+                      className="mt-4 text-sm text-primary/60 hover:text-primary transition-colors"
+                    >
+                      إلغاء
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Virtue Modal/Overlay */}
             <AnimatePresence>
@@ -665,7 +800,7 @@ export default function App() {
                     <div className="flex justify-between items-start">
                       <h3 className="text-xl font-bold font-serif">فضل هذا الذكر</h3>
                       <div className="flex items-center gap-3">
-                        <button onClick={handleShare} className="text-primary/40 hover:text-primary transition-colors" title="مشاركة">
+                        <button onClick={() => setShowShareMenu(true)} className="text-primary/40 hover:text-primary transition-colors" title="مشاركة">
                           <Share2 size={20} />
                         </button>
                         <button onClick={() => setShowVirtue(false)} className="text-primary/40 hover:text-primary transition-colors">
