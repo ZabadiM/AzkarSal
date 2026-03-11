@@ -379,6 +379,15 @@ export default function App() {
           if (watermark) watermark.classList.remove('hidden');
           if (shareDetails) shareDetails.classList.remove('hidden');
 
+          // Temporarily fix width to ensure a good aspect ratio for sharing
+          const originalWidth = shareRef.current.style.width;
+          const originalMaxWidth = shareRef.current.style.maxWidth;
+          const originalPadding = shareRef.current.style.padding;
+          
+          shareRef.current.style.width = '600px';
+          shareRef.current.style.maxWidth = 'none';
+          shareRef.current.style.padding = '40px';
+
           // Small delay to ensure layout is updated
           await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -394,6 +403,11 @@ export default function App() {
             }
           });
           
+          // Restore original styles
+          shareRef.current.style.width = originalWidth;
+          shareRef.current.style.maxWidth = originalMaxWidth;
+          shareRef.current.style.padding = originalPadding;
+
           if (watermark) watermark.classList.add('hidden');
           if (shareDetails) shareDetails.classList.add('hidden');
 
@@ -538,29 +552,34 @@ export default function App() {
         </header>
         
         <main className="w-full max-w-md flex flex-col gap-6 pb-8 z-10">
-          <div className="glass-panel p-6 rounded-3xl relative overflow-hidden">
-            <div className="absolute -right-4 -top-4 text-accent/10">
-              <Trophy size={120} />
+          <div className="glass-panel p-6 rounded-3xl relative overflow-hidden bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
+            <div className="absolute -left-4 -top-4 text-accent/10 transform -scale-x-100">
+              <Trophy size={140} />
             </div>
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-4 text-accent">
-                <Trophy size={24} />
+                <div className="p-2 bg-accent/10 rounded-xl">
+                  <Trophy size={20} />
+                </div>
                 <h2 className="text-lg font-bold">أكثر ذكر تم إنجازه</h2>
               </div>
-              <p className="text-2xl md:text-3xl font-serif arabic-text text-primary mb-3 leading-relaxed">
+              <p className="text-2xl md:text-3xl font-serif arabic-text text-primary mb-4 leading-relaxed">
                 {topDhikr ? topDhikr.text : 'لا يوجد بيانات بعد'}
               </p>
-              <p className="text-sm font-medium text-primary/70 bg-primary/5 inline-block px-4 py-1.5 rounded-full border border-primary/10">
-                مجموع التكرار: {maxCount} مرة
-              </p>
+              <div className="inline-flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-xl border border-primary/10">
+                <Award size={16} className="text-accent" />
+                <span className="text-sm font-bold text-primary/80">
+                  مجموع التكرار: <span className="text-primary">{maxCount}</span> مرة
+                </span>
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <StatCard title="اليوم" stats={todayStats} icon={<Clock size={20}/>} />
-            <StatCard title="هذا الأسبوع" stats={weekStats} icon={<Calendar size={20}/>} />
-            <StatCard title="هذا الشهر" stats={monthStats} icon={<BarChart3 size={20}/>} />
-            <StatCard title="هذا العام" stats={yearStats} icon={<Award size={20}/>} />
+            <StatCard title="اليوم" stats={todayStats} icon={<Clock size={20} className="text-blue-500" />} />
+            <StatCard title="هذا الأسبوع" stats={weekStats} icon={<Calendar size={20} className="text-green-500" />} />
+            <StatCard title="هذا الشهر" stats={monthStats} icon={<BarChart3 size={20} className="text-purple-500" />} />
+            <StatCard title="هذا العام" stats={yearStats} icon={<Award size={20} className="text-orange-500" />} />
           </div>
 
           <div className="glass-panel p-6 rounded-3xl">
@@ -960,30 +979,30 @@ export default function App() {
                               )}
                             </div>
                             
-                            <div className="mt-4 flex flex-col gap-3">
+                            <div className="mt-4 flex flex-row gap-2">
                               {/* Counter Progress Bar with Text Inside */}
-                              <div className={`relative w-full h-8 rounded-lg overflow-hidden flex items-center justify-between px-3 ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
+                              <div className={`relative flex-1 h-8 rounded-lg overflow-hidden flex items-center justify-between px-3 ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
                                 <div 
                                   className={`absolute right-0 top-0 h-full transition-all duration-500 ${isCompleted ? 'bg-green-500/80' : (isSelected ? 'bg-secondary/40' : 'bg-primary/20')}`} 
                                   style={{ width: `${counterProgress}%` }}
                                 />
-                                <span className={`relative z-10 text-xs font-bold ${isSelected ? 'text-secondary' : 'text-primary'}`}>
+                                <span className={`relative z-10 text-[10px] sm:text-xs font-bold ${isSelected ? 'text-secondary' : 'text-primary'}`}>
                                   الإنجاز: {dhikrCount} {dhikr.target ? `/ ${dhikr.target}` : ''}
                                 </span>
                                 {isCompleted && (
-                                  <span className={`relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold ${isSelected ? 'bg-secondary text-primary' : 'bg-green-500 text-white'}`}>
+                                  <span className={`relative z-10 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${isSelected ? 'bg-secondary text-primary' : 'bg-green-500 text-white'}`}>
                                     مكتمل
                                   </span>
                                 )}
                               </div>
                               
                               {/* Timer Progress Bar with Text Inside */}
-                              <div className={`relative w-full h-8 rounded-lg overflow-hidden flex items-center px-3 ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
+                              <div className={`relative flex-1 h-8 rounded-lg overflow-hidden flex items-center px-3 ${isSelected ? 'bg-secondary/20' : 'bg-primary/10'}`}>
                                 <div 
                                   className={`absolute right-0 top-0 h-full transition-all duration-500 ${dhikrTime >= 300 ? 'bg-green-500/80' : (isSelected ? 'bg-secondary/30' : 'bg-accent/30')}`} 
                                   style={{ width: `${timerProgress}%` }}
                                 />
-                                <span className={`relative z-10 text-xs font-bold ${isSelected ? 'text-secondary' : 'text-primary'}`}>
+                                <span className={`relative z-10 text-[10px] sm:text-xs font-bold ${isSelected ? 'text-secondary' : 'text-primary'}`}>
                                   الوقت: {formatDuration(dhikrTime)}
                                 </span>
                               </div>
@@ -1168,18 +1187,21 @@ export default function App() {
 // Helper component for Stats View
 function StatCard({ title, stats, icon }: { title: string, stats: { count: number, timeSpent: number }, icon: React.ReactNode }) {
   return (
-    <div className="glass-panel p-5 rounded-3xl flex flex-col gap-2 transition-transform hover:scale-[1.02]">
-      <div className="flex items-center gap-2 text-primary/70 mb-2">
-        <div className="p-2 bg-primary/5 rounded-xl">
+    <div className="glass-panel p-5 rounded-3xl flex flex-col gap-3 transition-all hover:scale-[1.02] hover:shadow-lg hover:bg-primary/5 border border-primary/10">
+      <div className="flex items-center gap-2 text-primary/80 mb-1">
+        <div className="p-2 bg-primary/5 rounded-xl shadow-sm">
           {icon}
         </div>
-        <span className="font-medium text-sm">{title}</span>
+        <span className="font-bold text-sm tracking-wide">{title}</span>
       </div>
-      <div className="text-3xl font-bold text-primary tracking-tight">
-        {stats.count} <span className="text-sm font-medium text-primary/50 tracking-normal">تسبيحة</span>
-      </div>
-      <div className="text-xs font-bold text-accent bg-accent/10 inline-block px-3 py-1.5 rounded-lg self-start mt-1">
-        {formatDuration(stats.timeSpent)}
+      <div className="flex flex-col gap-1">
+        <div className="text-3xl font-bold text-primary tracking-tight">
+          {stats.count.toLocaleString('ar-EG')} <span className="text-sm font-medium text-primary/50 tracking-normal">تسبيحة</span>
+        </div>
+        <div className="text-xs font-bold text-accent bg-accent/10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg self-start mt-1">
+          <Clock size={12} />
+          <span>{formatDuration(stats.timeSpent)}</span>
+        </div>
       </div>
     </div>
   );
