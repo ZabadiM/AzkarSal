@@ -363,7 +363,9 @@ export default function App() {
         setIsGeneratingImage(true);
         try {
           const watermark = shareRef.current?.querySelector('#watermark');
+          const shareDetails = shareRef.current?.querySelector('#share-details');
           if (watermark) watermark.classList.remove('hidden');
+          if (shareDetails) shareDetails.classList.remove('hidden');
 
           // Small delay to ensure layout is updated
           await new Promise(resolve => setTimeout(resolve, 50));
@@ -381,6 +383,7 @@ export default function App() {
           });
           
           if (watermark) watermark.classList.add('hidden');
+          if (shareDetails) shareDetails.classList.add('hidden');
 
           setShareImageBlob(blob);
         } catch (error) {
@@ -711,6 +714,20 @@ export default function App() {
                     >
                       {currentDhikr.text}
                     </h2>
+                    <div id="share-details" className="hidden mt-6 text-right space-y-4 border-t border-primary/10 pt-4">
+                      {currentDhikr.virtue && (
+                        <div>
+                          <h4 className="text-sm font-bold text-primary/80 mb-1">الفضل:</h4>
+                          <p className="text-sm text-primary/70">{currentDhikr.virtue}</p>
+                        </div>
+                      )}
+                      {currentDhikr.hadith && (
+                        <div>
+                          <h4 className="text-sm font-bold text-primary/80 mb-1">الحديث:</h4>
+                          <p className="text-sm text-primary/70">{currentDhikr.hadith}</p>
+                        </div>
+                      )}
+                    </div>
                     <div id="watermark" className="hidden mt-6 pt-4 border-t border-primary/10">
                       <p className="text-sm font-medium text-primary/60">تمت المشاركة عن طريق تطبيق AzkarSal</p>
                     </div>
