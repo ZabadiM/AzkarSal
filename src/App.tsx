@@ -96,7 +96,6 @@ const normalizeArabic = (text: string) => {
 
 export default function App() {
   const [view, setView] = useState<'main' | 'stats' | 'manage'>('main');
-  const [statsTab, setStatsTab] = useState<'counter' | 'timer'>('counter');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mode, setMode] = useState<'counter' | 'timer'>('counter');
   const [timeLeft, setTimeLeft] = useState(60);
@@ -127,11 +126,23 @@ export default function App() {
 
   // Handle back button on mobile
   useEffect(() => {
-    const handlePopState = () => {
-      setView('main');
-      setShowList(false);
-      setShowVirtue(false);
-      setShowShareMenu(false);
+    if (!window.history.state) {
+      window.history.replaceState({ view: 'main', showList: false, showVirtue: false, showShareMenu: false }, '');
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      const state = e.state;
+      if (state) {
+        setView(state.view || 'main');
+        setShowList(state.showList || false);
+        setShowVirtue(state.showVirtue || false);
+        setShowShareMenu(state.showShareMenu || false);
+      } else {
+        setView('main');
+        setShowList(false);
+        setShowVirtue(false);
+        setShowShareMenu(false);
+      }
     };
     
     window.addEventListener('popstate', handlePopState);
@@ -140,14 +151,24 @@ export default function App() {
 
   const changeView = (newView: 'main' | 'stats' | 'manage') => {
     if (newView !== 'main' && view === 'main') {
-      window.history.pushState({ view: newView }, '');
+      window.history.pushState({ view: newView, showList, showVirtue, showShareMenu }, '');
     }
     setView(newView);
   };
 
   const openModal = (setter: React.Dispatch<React.SetStateAction<boolean>>) => {
-    window.history.pushState({ modal: true }, '');
+    const nextState = { view, showList, showVirtue, showShareMenu };
+    if (setter === setShowList) nextState.showList = true;
+    if (setter === setShowVirtue) nextState.showVirtue = true;
+    if (setter === setShowShareMenu) nextState.showShareMenu = true;
+    window.history.pushState(nextState, '');
     setter(true);
+  };
+
+  const closeOverlay = () => {
+    if (view !== 'main' || showList || showVirtue || showShareMenu) {
+      window.history.back();
+    }
   };
   
   // Custom Dhikr List
@@ -288,7 +309,7 @@ export default function App() {
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
         
-        if (type === 'click') {
+        if (type === 'click' || type === 'approaching') {
           oscillator.type = 'sine';
           oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
           gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
@@ -417,7 +438,7 @@ export default function App() {
         console.error('Error copying to clipboard:', error);
       }
     }
-    setShowShareMenu(false);
+    closeOverlay();
   };
 
   const handleShareImage = async () => {
@@ -442,7 +463,7 @@ export default function App() {
         shared = true;
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
-          setShowShareMenu(false);
+          closeOverlay();
           return;
         }
         console.error('Share API failed:', error);
@@ -460,7 +481,7 @@ export default function App() {
       URL.revokeObjectURL(url);
     }
     
-    setShowShareMenu(false);
+    closeOverlay();
   };
 
   useEffect(() => {
@@ -582,27 +603,42 @@ export default function App() {
   const yearStats = getStatsForPeriod(365);
 
   let maxCount = 0;
-  let topDhikrId = '';
+  let maxTime = 0;
+  let topDhikrIdByCount = '';
+  let topDhikrIdByTime = '';
   const allTimeDhikrCounts: Record<string, number> = {};
+  const allTimeDhikrTimes: Record<string, number> = {};
+  
   Object.values(dailyStats).forEach(day => {
     Object.entries(day).forEach(([id, stat]: [string, any]) => {
-      allTimeDhikrCounts[id] = (allTimeDhikrCounts[id] || 0) + (statsTab === 'counter' ? stat.count : stat.timeSpent);
+      allTimeDhikrCounts[id] = (allTimeDhikrCounts[id] || 0) + stat.count;
+      allTimeDhikrTimes[id] = (allTimeDhikrTimes[id] || 0) + stat.timeSpent;
     });
   });
+  
   Object.entries(allTimeDhikrCounts).forEach(([id, count]) => {
     if (count > maxCount) {
       maxCount = count;
-      topDhikrId = id;
+      topDhikrIdByCount = id;
     }
   });
-  const topDhikr = dhikrList.find(d => d.id === topDhikrId) || INITIAL_DHIKR_LIST.find(d => d.id === topDhikrId);
+  
+  Object.entries(allTimeDhikrTimes).forEach(([id, time]) => {
+    if (time > maxTime) {
+      maxTime = time;
+      topDhikrIdByTime = id;
+    }
+  });
+  
+  const topDhikrByCount = dhikrList.find(d => d.id === topDhikrIdByCount) || INITIAL_DHIKR_LIST.find(d => d.id === topDhikrIdByCount);
+  const topDhikrByTime = dhikrList.find(d => d.id === topDhikrIdByTime) || INITIAL_DHIKR_LIST.find(d => d.id === topDhikrIdByTime);
 
   // --- Render Manage View ---
   if (view === 'manage') {
     return <ManageDhikrView 
       dhikrList={dhikrList} 
       setDhikrList={setDhikrList} 
-      onClose={() => changeView('main')} 
+      onClose={closeOverlay} 
     />;
   }
 
@@ -613,10 +649,12 @@ export default function App() {
       d.setDate(d.getDate() - (6 - i));
       const dateStr = getLocalDateStr(d);
       const dayStats = dailyStats[dateStr] || {};
-      const totalValue = Object.values(dayStats).reduce((acc: number, curr: any) => acc + (statsTab === 'counter' ? Number(curr.count) : Number(curr.timeSpent)), 0);
+      const totalCount = Object.values(dayStats).reduce((acc: number, curr: any) => acc + Number(curr.count), 0);
+      const totalTime = Object.values(dayStats).reduce((acc: number, curr: any) => acc + Number(curr.timeSpent), 0);
       return {
         name: `${d.getDate()}/${d.getMonth() + 1}`,
-        value: statsTab === 'counter' ? totalValue : Math.round(Number(totalValue) / 60) // in minutes for chart
+        count: totalCount,
+        time: Math.round(Number(totalTime) / 60) // in minutes for chart
       };
     });
 
@@ -625,10 +663,12 @@ export default function App() {
       d.setDate(d.getDate() - (29 - i));
       const dateStr = getLocalDateStr(d);
       const dayStats = dailyStats[dateStr] || {};
-      const totalValue = Object.values(dayStats).reduce((acc: number, curr: any) => acc + (statsTab === 'counter' ? Number(curr.count) : Number(curr.timeSpent)), 0);
+      const totalCount = Object.values(dayStats).reduce((acc: number, curr: any) => acc + Number(curr.count), 0);
+      const totalTime = Object.values(dayStats).reduce((acc: number, curr: any) => acc + Number(curr.timeSpent), 0);
       return {
         name: `${d.getDate()}/${d.getMonth() + 1}`,
-        value: statsTab === 'counter' ? totalValue : Math.round(Number(totalValue) / 60) // in minutes for chart
+        count: totalCount,
+        time: Math.round(Number(totalTime) / 60) // in minutes for chart
       };
     });
 
@@ -640,48 +680,53 @@ export default function App() {
 
         <header className="w-full max-w-md flex justify-between items-center mb-6 z-10 glass-panel px-6 py-4 rounded-2xl">
           <h1 className="text-2xl font-bold font-serif">إحصائيات الإنجاز</h1>
-          <button onClick={() => changeView('main')} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
+          <button onClick={closeOverlay} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
             <X size={24} />
           </button>
         </header>
 
-        <div className="w-full max-w-md flex bg-primary/5 p-1 rounded-xl mb-6 z-10">
-          <button
-            onClick={() => setStatsTab('counter')}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${statsTab === 'counter' ? 'bg-surface text-primary shadow-sm' : 'text-primary/60 hover:text-primary'}`}
-          >
-            العداد
-          </button>
-          <button
-            onClick={() => setStatsTab('timer')}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${statsTab === 'timer' ? 'bg-surface text-primary shadow-sm' : 'text-primary/60 hover:text-primary'}`}
-          >
-            المؤقت
-          </button>
-        </div>
-        
         <main className="w-full max-w-md flex flex-col gap-6 pb-8 z-10">
           <div className="glass-panel p-6 rounded-3xl relative overflow-hidden bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
             <div className="absolute -left-4 -top-4 text-accent/10 transform -scale-x-100">
               <Trophy size={140} />
             </div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-4 text-accent">
-                <div className="p-2 bg-accent/10 rounded-xl">
-                  <Trophy size={20} />
+            <div className="relative z-10 flex flex-col gap-6">
+              <div>
+                <div className="flex items-center gap-3 mb-4 text-accent">
+                  <div className="p-2 bg-accent/10 rounded-xl">
+                    <Trophy size={20} />
+                  </div>
+                  <h2 className="text-lg font-bold">أكثر ذكر تكراراً</h2>
                 </div>
-                <h2 className="text-lg font-bold">أكثر ذكر تم إنجازه</h2>
+                <p className="text-2xl md:text-3xl font-serif arabic-text text-primary mb-4 leading-relaxed">
+                  {topDhikrByCount ? topDhikrByCount.text : 'لا يوجد بيانات بعد'}
+                </p>
+                <div className="inline-flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-xl border border-primary/10">
+                  <Award size={16} className="text-accent" />
+                  <span className="text-sm font-bold text-primary/80">
+                    مجموع التكرار: <span className="text-primary">{maxCount}</span> مرة
+                  </span>
+                </div>
               </div>
-              <p className="text-2xl md:text-3xl font-serif arabic-text text-primary mb-4 leading-relaxed">
-                {topDhikr ? topDhikr.text : 'لا يوجد بيانات بعد'}
-              </p>
-              <div className="inline-flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-xl border border-primary/10">
-                <Award size={16} className="text-accent" />
-                <span className="text-sm font-bold text-primary/80">
-                  {statsTab === 'counter' ? 'مجموع التكرار: ' : 'مجموع الوقت: '}
-                  <span className="text-primary">{statsTab === 'counter' ? maxCount : formatDuration(maxCount)}</span>
-                  {statsTab === 'counter' && ' مرة'}
-                </span>
+              
+              <div className="h-px w-full bg-primary/10"></div>
+              
+              <div>
+                <div className="flex items-center gap-3 mb-4 text-blue-500">
+                  <div className="p-2 bg-blue-500/10 rounded-xl">
+                    <Clock size={20} />
+                  </div>
+                  <h2 className="text-lg font-bold">أكثر ذكر وقتاً</h2>
+                </div>
+                <p className="text-2xl md:text-3xl font-serif arabic-text text-primary mb-4 leading-relaxed">
+                  {topDhikrByTime ? topDhikrByTime.text : 'لا يوجد بيانات بعد'}
+                </p>
+                <div className="inline-flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-xl border border-primary/10">
+                  <Clock size={16} className="text-blue-500" />
+                  <span className="text-sm font-bold text-primary/80">
+                    مجموع الوقت: <span className="text-primary">{formatDuration(maxTime)}</span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -708,7 +753,8 @@ export default function App() {
                     labelStyle={{ color: 'var(--color-primary)', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: 'var(--color-primary)' }}
                   />
-                  <Bar dataKey="value" fill="var(--color-accent)" radius={[6, 6, 0, 0]} name={statsTab === 'counter' ? "التسبيحات" : "الدقائق"} />
+                  <Bar dataKey="count" fill="var(--color-accent)" radius={[6, 6, 0, 0]} name="التسبيحات" />
+                  <Bar dataKey="time" fill="#3b82f6" radius={[6, 6, 0, 0]} name="الدقائق" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -740,12 +786,21 @@ export default function App() {
                   />
                   <Line 
                     type="monotone" 
-                    dataKey="value" 
+                    dataKey="count" 
                     stroke="var(--color-accent)" 
                     strokeWidth={3} 
                     dot={false}
                     activeDot={{ r: 6, fill: 'var(--color-accent)', stroke: 'var(--color-surface)', strokeWidth: 2 }}
-                    name={statsTab === 'counter' ? "التسبيحات" : "الدقائق"} 
+                    name="التسبيحات" 
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="time" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3} 
+                    dot={false}
+                    activeDot={{ r: 6, fill: '#3b82f6', stroke: 'var(--color-surface)', strokeWidth: 2 }}
+                    name="الدقائق" 
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -896,7 +951,7 @@ export default function App() {
                         <button 
                           onClick={() => {
                             if (!showVirtue) openModal(setShowVirtue);
-                            else setShowVirtue(false);
+                            else closeOverlay();
                           }}
                           className="inline-flex items-center gap-1.5 text-sm font-medium text-primary/60 hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
                         >
@@ -929,7 +984,7 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-md"
-                  onClick={() => setShowShareMenu(false)}
+                  onClick={closeOverlay}
                 >
                   <motion.div 
                     initial={{ scale: 0.9, y: 20 }}
@@ -957,7 +1012,7 @@ export default function App() {
                       </button>
                     </div>
                     <button 
-                      onClick={() => setShowShareMenu(false)}
+                      onClick={closeOverlay}
                       className="mt-4 text-sm font-medium text-primary/60 hover:text-primary transition-colors px-4 py-2 rounded-lg hover:bg-primary/5"
                     >
                       إلغاء
@@ -975,7 +1030,7 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-md"
-                  onClick={() => setShowVirtue(false)}
+                  onClick={closeOverlay}
                 >
                   <motion.div 
                     initial={{ scale: 0.9, y: 20 }}
@@ -991,7 +1046,7 @@ export default function App() {
                         <button onClick={() => openModal(setShowShareMenu)} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors" title="مشاركة">
                           <Share2 size={20} />
                         </button>
-                        <button onClick={() => setShowVirtue(false)} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors">
+                        <button onClick={closeOverlay} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors">
                           <X size={20} />
                         </button>
                       </div>
@@ -1012,7 +1067,7 @@ export default function App() {
                       )}
                     </div>
                     <button 
-                      onClick={() => setShowVirtue(false)}
+                      onClick={closeOverlay}
                       className="w-full py-3.5 bg-primary text-secondary rounded-xl font-medium mt-2 shadow-md hover:bg-primary/90 transition-colors"
                     >
                       فهمت
@@ -1033,7 +1088,7 @@ export default function App() {
                 >
                   <div className="p-6 flex items-center justify-between border-b border-primary/10 bg-secondary/80 backdrop-blur-sm sticky top-0 z-10">
                     <h2 className="text-2xl font-bold font-serif">قائمة الأذكار</h2>
-                    <button onClick={() => setShowList(false)} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
+                    <button onClick={closeOverlay} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
                       <X size={24} />
                     </button>
                   </div>
@@ -1084,7 +1139,7 @@ export default function App() {
                           <button
                             onClick={() => {
                               setCurrentIndex(idx);
-                              setShowList(false);
+                              closeOverlay();
                             }}
                             className={`w-full text-right p-5 rounded-2xl border transition-all duration-300 ${
                               isSelected 
