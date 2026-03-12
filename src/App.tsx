@@ -127,7 +127,7 @@ export default function App() {
   // Handle back button on mobile
   useEffect(() => {
     if (!window.history.state) {
-      window.history.replaceState({ view: 'main', showList: false, showVirtue: false, showShareMenu: false }, '');
+      window.history.replaceState({ view: 'main', showList: false, showVirtue: false, showShareMenu: false }, '', window.location.pathname);
     }
 
     const handlePopState = (e: PopStateEvent) => {
@@ -151,17 +151,18 @@ export default function App() {
 
   const changeView = (newView: 'main' | 'stats' | 'manage') => {
     if (newView !== 'main' && view === 'main') {
-      window.history.pushState({ view: newView, showList, showVirtue, showShareMenu }, '');
+      window.history.pushState({ view: newView, showList, showVirtue, showShareMenu }, '', `#${newView}`);
     }
     setView(newView);
   };
 
   const openModal = (setter: React.Dispatch<React.SetStateAction<boolean>>) => {
     const nextState = { view, showList, showVirtue, showShareMenu };
-    if (setter === setShowList) nextState.showList = true;
-    if (setter === setShowVirtue) nextState.showVirtue = true;
-    if (setter === setShowShareMenu) nextState.showShareMenu = true;
-    window.history.pushState(nextState, '');
+    let hash = '#modal';
+    if (setter === setShowList) { nextState.showList = true; hash = '#list'; }
+    if (setter === setShowVirtue) { nextState.showVirtue = true; hash = '#virtue'; }
+    if (setter === setShowShareMenu) { nextState.showShareMenu = true; hash = '#share'; }
+    window.history.pushState(nextState, '', hash);
     setter(true);
   };
 
@@ -339,10 +340,19 @@ export default function App() {
       }
     }
     
-    if (window.navigator.vibrate) {
-      if (type === 'click') window.navigator.vibrate(10);
-      else if (type === 'approaching') window.navigator.vibrate([50, 50, 50]);
-      else window.navigator.vibrate([200, 100, 200]);
+    try {
+      const vibrate = navigator.vibrate || (navigator as any).webkitVibrate || (navigator as any).mozVibrate || (navigator as any).msVibrate;
+      if (vibrate) {
+        if (type === 'click') {
+          vibrate.call(navigator, 30);
+        } else if (type === 'approaching') {
+          vibrate.call(navigator, [100, 50, 100]);
+        } else {
+          vibrate.call(navigator, [300, 100, 300]);
+        }
+      }
+    } catch (e) {
+      console.error('Vibration error:', e);
     }
   };
 
