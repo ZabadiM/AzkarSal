@@ -96,6 +96,7 @@ const normalizeArabic = (text: string) => {
 
 export default function App() {
   const [view, setView] = useState<'main' | 'stats' | 'manage'>('main');
+  const [statsTab, setStatsTab] = useState<'counter' | 'timer'>('counter');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mode, setMode] = useState<'counter' | 'timer'>('counter');
   const [timeLeft, setTimeLeft] = useState(60);
@@ -123,6 +124,31 @@ export default function App() {
     const saved = localStorage.getItem('tasbih_auto_advance');
     return saved ? JSON.parse(saved) : false;
   });
+
+  // Handle back button on mobile
+  useEffect(() => {
+    const handlePopState = () => {
+      setView('main');
+      setShowList(false);
+      setShowVirtue(false);
+      setShowShareMenu(false);
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const changeView = (newView: 'main' | 'stats' | 'manage') => {
+    if (newView !== 'main' && view === 'main') {
+      window.history.pushState({ view: newView }, '');
+    }
+    setView(newView);
+  };
+
+  const openModal = (setter: React.Dispatch<React.SetStateAction<boolean>>) => {
+    window.history.pushState({ modal: true }, '');
+    setter(true);
+  };
   
   // Custom Dhikr List
   const [dhikrList, setDhikrList] = useState<Dhikr[]>(() => {
@@ -151,10 +177,20 @@ export default function App() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Progress calculations for counter
-  const step = currentDhikr?.step || currentDhikr?.target || 100;
+  const target = currentDhikr?.target || 100;
+  const step = currentDhikr?.step || target;
+  
+  let counterProgressPercentage;
+  let isCounterComplete;
   const counterProgressValue = currentCount % step;
-  const counterProgressPercentage = currentCount === 0 ? 0 : (counterProgressValue === 0 ? 100 : (counterProgressValue / step) * 100);
-  const isCounterComplete = currentCount > 0 && counterProgressValue === 0;
+
+  if (currentCount >= target) {
+    counterProgressPercentage = 100;
+    isCounterComplete = true;
+  } else {
+    counterProgressPercentage = currentCount === 0 ? 0 : (counterProgressValue === 0 ? 100 : (counterProgressValue / step) * 100);
+    isCounterComplete = currentCount > 0 && counterProgressValue === 0;
+  }
   
   // Progress calculations for timer (assuming a target of 5 minutes (300 seconds) per dhikr if not specified)
   const timerTarget = 300; // 5 minutes default target
@@ -194,12 +230,14 @@ export default function App() {
 
   const prevCountRef = useRef(currentCount);
   const prevTimeRef = useRef(currentTimeSpent);
+  const prevDhikrIdRef = useRef(currentDhikr?.id);
+  const prevTimerDhikrIdRef = useRef(currentDhikr?.id);
 
   useEffect(() => {
     if (autoAdvance && mode === 'counter') {
-      if (currentCount > 0 && currentCount !== prevCountRef.current) {
-        const step = currentDhikr?.step || currentDhikr?.target || 100;
-        if (currentCount % step === 0) {
+      if (currentCount > 0 && currentCount !== prevCountRef.current && currentDhikr?.id === prevDhikrIdRef.current) {
+        const target = currentDhikr?.target || 100;
+        if (currentCount === target) {
           const timeout = setTimeout(() => {
             setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
           }, 800);
@@ -208,11 +246,12 @@ export default function App() {
       }
     }
     prevCountRef.current = currentCount;
+    prevDhikrIdRef.current = currentDhikr?.id;
   }, [currentCount, autoAdvance, mode, currentDhikr, dhikrList.length]);
 
   useEffect(() => {
     if (autoAdvance && mode === 'timer') {
-      if (currentTimeSpent > 0 && currentTimeSpent !== prevTimeRef.current) {
+      if (currentTimeSpent > 0 && currentTimeSpent !== prevTimeRef.current && currentDhikr?.id === prevTimerDhikrIdRef.current) {
         const timerTarget = 300;
         if (currentTimeSpent === timerTarget) {
           const timeout = setTimeout(() => {
@@ -223,7 +262,8 @@ export default function App() {
       }
     }
     prevTimeRef.current = currentTimeSpent;
-  }, [currentTimeSpent, autoAdvance, mode, dhikrList.length]);
+    prevTimerDhikrIdRef.current = currentDhikr?.id;
+  }, [currentTimeSpent, autoAdvance, mode, currentDhikr, dhikrList.length]);
 
   // Ensure currentIndex is valid if list changes
   useEffect(() => {
@@ -238,47 +278,49 @@ export default function App() {
   }, [soundEnabled]);
 
   // Non-musical sound effect (simple beep)
-  const playBeep = (type: 'click' | 'alarm') => {
-    if (!soundEnabledRef.current) return;
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      
-      if (type === 'click') {
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.1);
-      } else if (type === 'alarm') {
-        // Double beep for alarm
-        oscillator.type = 'square';
-        oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  const playBeep = (type: 'click' | 'alarm' | 'approaching') => {
+    if (soundEnabledRef.current) {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
         
-        oscillator.start();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
         
-        // Beep 1
-        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.2);
-        
-        // Beep 2
-        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime + 0.4);
-        gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.6);
-        
-        oscillator.stop(audioCtx.currentTime + 0.6);
+        if (type === 'click') {
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+          gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.1);
+        } else if (type === 'alarm') {
+          // Double beep for alarm
+          oscillator.type = 'square';
+          oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+          gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          
+          oscillator.start();
+          
+          // Beep 1
+          gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.2);
+          
+          // Beep 2
+          gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime + 0.4);
+          gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.6);
+          
+          oscillator.stop(audioCtx.currentTime + 0.6);
+        }
+      } catch (e) {
+        // Ignore audio context errors
       }
-    } catch (e) {
-      // Ignore audio context errors
     }
     
     if (window.navigator.vibrate) {
       if (type === 'click') window.navigator.vibrate(10);
+      else if (type === 'approaching') window.navigator.vibrate([50, 50, 50]);
       else window.navigator.vibrate([200, 100, 200]);
     }
   };
@@ -286,6 +328,11 @@ export default function App() {
   const handleIncrement = () => {
     if (!currentDhikr) return;
     const today = getTodayStr();
+    
+    const newCount = currentCount + 1;
+    const target = currentDhikr.target || 100;
+    const remaining = target - newCount;
+    
     setDailyStats(prev => {
       const todayStats = prev[today] || {};
       const dhikrStats = todayStats[currentDhikr.id] || { count: 0, timeSpent: 0 };
@@ -300,7 +347,12 @@ export default function App() {
         }
       };
     });
-    playBeep('click');
+    
+    if (remaining >= 0 && remaining <= 2) {
+      playBeep('approaching');
+    } else {
+      playBeep('click');
+    }
   };
 
   const handleReset = () => {
@@ -515,7 +567,7 @@ export default function App() {
       const dateStr = getLocalDateStr(d);
       const dayStats = dailyStats[dateStr];
       if (dayStats) {
-        Object.values(dayStats).forEach(stat => {
+        Object.values(dayStats).forEach((stat: any) => {
           totalCount += stat.count;
           totalTime += stat.timeSpent;
         });
@@ -533,8 +585,8 @@ export default function App() {
   let topDhikrId = '';
   const allTimeDhikrCounts: Record<string, number> = {};
   Object.values(dailyStats).forEach(day => {
-    Object.entries(day).forEach(([id, stat]) => {
-      allTimeDhikrCounts[id] = (allTimeDhikrCounts[id] || 0) + stat.count;
+    Object.entries(day).forEach(([id, stat]: [string, any]) => {
+      allTimeDhikrCounts[id] = (allTimeDhikrCounts[id] || 0) + (statsTab === 'counter' ? stat.count : stat.timeSpent);
     });
   });
   Object.entries(allTimeDhikrCounts).forEach(([id, count]) => {
@@ -550,7 +602,7 @@ export default function App() {
     return <ManageDhikrView 
       dhikrList={dhikrList} 
       setDhikrList={setDhikrList} 
-      onClose={() => setView('main')} 
+      onClose={() => changeView('main')} 
     />;
   }
 
@@ -561,10 +613,10 @@ export default function App() {
       d.setDate(d.getDate() - (6 - i));
       const dateStr = getLocalDateStr(d);
       const dayStats = dailyStats[dateStr] || {};
-      const totalCount = Object.values(dayStats).reduce((acc, curr) => acc + curr.count, 0);
+      const totalValue = Object.values(dayStats).reduce((acc: number, curr: any) => acc + (statsTab === 'counter' ? Number(curr.count) : Number(curr.timeSpent)), 0);
       return {
         name: `${d.getDate()}/${d.getMonth() + 1}`,
-        count: totalCount
+        value: statsTab === 'counter' ? totalValue : Math.round(Number(totalValue) / 60) // in minutes for chart
       };
     });
 
@@ -573,10 +625,10 @@ export default function App() {
       d.setDate(d.getDate() - (29 - i));
       const dateStr = getLocalDateStr(d);
       const dayStats = dailyStats[dateStr] || {};
-      const totalCount = Object.values(dayStats).reduce((acc, curr) => acc + curr.count, 0);
+      const totalValue = Object.values(dayStats).reduce((acc: number, curr: any) => acc + (statsTab === 'counter' ? Number(curr.count) : Number(curr.timeSpent)), 0);
       return {
         name: `${d.getDate()}/${d.getMonth() + 1}`,
-        count: totalCount
+        value: statsTab === 'counter' ? totalValue : Math.round(Number(totalValue) / 60) // in minutes for chart
       };
     });
 
@@ -586,12 +638,27 @@ export default function App() {
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-accent/5 blur-3xl pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-3xl pointer-events-none" />
 
-        <header className="w-full max-w-md flex justify-between items-center mb-8 z-10 glass-panel px-6 py-4 rounded-2xl">
+        <header className="w-full max-w-md flex justify-between items-center mb-6 z-10 glass-panel px-6 py-4 rounded-2xl">
           <h1 className="text-2xl font-bold font-serif">إحصائيات الإنجاز</h1>
-          <button onClick={() => setView('main')} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
+          <button onClick={() => changeView('main')} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
             <X size={24} />
           </button>
         </header>
+
+        <div className="w-full max-w-md flex bg-primary/5 p-1 rounded-xl mb-6 z-10">
+          <button
+            onClick={() => setStatsTab('counter')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${statsTab === 'counter' ? 'bg-surface text-primary shadow-sm' : 'text-primary/60 hover:text-primary'}`}
+          >
+            العداد
+          </button>
+          <button
+            onClick={() => setStatsTab('timer')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${statsTab === 'timer' ? 'bg-surface text-primary shadow-sm' : 'text-primary/60 hover:text-primary'}`}
+          >
+            المؤقت
+          </button>
+        </div>
         
         <main className="w-full max-w-md flex flex-col gap-6 pb-8 z-10">
           <div className="glass-panel p-6 rounded-3xl relative overflow-hidden bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
@@ -611,7 +678,9 @@ export default function App() {
               <div className="inline-flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-xl border border-primary/10">
                 <Award size={16} className="text-accent" />
                 <span className="text-sm font-bold text-primary/80">
-                  مجموع التكرار: <span className="text-primary">{maxCount}</span> مرة
+                  {statsTab === 'counter' ? 'مجموع التكرار: ' : 'مجموع الوقت: '}
+                  <span className="text-primary">{statsTab === 'counter' ? maxCount : formatDuration(maxCount)}</span>
+                  {statsTab === 'counter' && ' مرة'}
                 </span>
               </div>
             </div>
@@ -639,7 +708,7 @@ export default function App() {
                     labelStyle={{ color: 'var(--color-primary)', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: 'var(--color-primary)' }}
                   />
-                  <Bar dataKey="count" fill="var(--color-accent)" radius={[6, 6, 0, 0]} name="التسبيحات" />
+                  <Bar dataKey="value" fill="var(--color-accent)" radius={[6, 6, 0, 0]} name={statsTab === 'counter' ? "التسبيحات" : "الدقائق"} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -671,12 +740,12 @@ export default function App() {
                   />
                   <Line 
                     type="monotone" 
-                    dataKey="count" 
+                    dataKey="value" 
                     stroke="var(--color-accent)" 
                     strokeWidth={3} 
                     dot={false}
                     activeDot={{ r: 6, fill: 'var(--color-accent)', stroke: 'var(--color-surface)', strokeWidth: 2 }}
-                    name="التسبيحات" 
+                    name={statsTab === 'counter' ? "التسبيحات" : "الدقائق"} 
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -698,21 +767,21 @@ export default function App() {
       <header className="w-full max-w-md flex justify-between items-center mb-4 z-10 glass-panel px-4 py-3 rounded-2xl">
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => setShowList(true)}
+            onClick={() => openModal(setShowList)}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
             title="قائمة الأذكار"
           >
             <Menu size={22} />
           </button>
           <button 
-            onClick={() => setView('stats')}
+            onClick={() => changeView('stats')}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
             title="الإحصائيات"
           >
             <BarChart3 size={22} />
           </button>
           <button 
-            onClick={() => setView('manage')}
+            onClick={() => changeView('manage')}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
             title="إدارة الأذكار"
           >
@@ -720,13 +789,6 @@ export default function App() {
           </button>
         </div>
         <div className="flex gap-1 sm:gap-2">
-          <button 
-            onClick={() => setAutoAdvance(!autoAdvance)}
-            className={`p-2.5 rounded-xl transition-colors ${autoAdvance ? 'bg-primary/10 text-primary' : 'hover:bg-primary/10 text-primary/60'}`}
-            title={autoAdvance ? 'إيقاف الانتقال التلقائي' : 'تفعيل الانتقال التلقائي'}
-          >
-            <FastForward size={20} />
-          </button>
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
@@ -758,7 +820,7 @@ export default function App() {
           <div className="text-center p-8 glass-panel rounded-3xl w-full">
             <p className="text-lg text-primary/60 mb-4">لا يوجد أذكار في القائمة</p>
             <button 
-              onClick={() => setView('manage')}
+              onClick={() => changeView('manage')}
               className="px-6 py-3 bg-primary text-secondary rounded-xl font-medium shadow-md hover:scale-105 transition-transform"
             >
               إضافة ذكر جديد
@@ -766,17 +828,24 @@ export default function App() {
           </div>
         ) : (
           <>
-            <div className="flex justify-center gap-3 w-full mb-[-1.5rem] z-20 relative">
+            <div className="flex justify-center gap-2 w-full mb-[-1.5rem] z-20 relative px-4">
               <button 
                 onClick={() => setFontSize(f => Math.min(f + 4, 72))} 
-                className="w-10 h-10 flex items-center justify-center text-primary/60 hover:text-primary transition-colors font-bold text-lg rounded-full glass-panel hover:bg-primary/5"
+                className="w-10 h-10 flex items-center justify-center text-primary/60 hover:text-primary transition-colors font-bold text-lg rounded-full glass-panel hover:bg-primary/5 shrink-0"
                 title="تكبير الخط"
               >
                 A+
               </button>
               <button 
+                onClick={() => setAutoAdvance(!autoAdvance)}
+                className={`px-4 h-10 flex items-center justify-center rounded-full glass-panel transition-colors text-sm font-bold ${autoAdvance ? 'bg-primary/10 text-primary border-primary/20' : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
+                title={autoAdvance ? 'إيقاف الانتقال التلقائي' : 'تفعيل الانتقال التلقائي'}
+              >
+                الانتقال التلقائي
+              </button>
+              <button 
                 onClick={() => setFontSize(f => Math.max(f - 4, 16))} 
-                className="w-10 h-10 flex items-center justify-center text-primary/60 hover:text-primary transition-colors font-bold text-sm rounded-full glass-panel hover:bg-primary/5"
+                className="w-10 h-10 flex items-center justify-center text-primary/60 hover:text-primary transition-colors font-bold text-sm rounded-full glass-panel hover:bg-primary/5 shrink-0"
                 title="تصغير الخط"
               >
                 A-
@@ -825,7 +894,10 @@ export default function App() {
                     <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-primary/5" data-html2canvas-ignore>
                       {(currentDhikr.virtue || currentDhikr.hadith) && (
                         <button 
-                          onClick={() => setShowVirtue(!showVirtue)}
+                          onClick={() => {
+                            if (!showVirtue) openModal(setShowVirtue);
+                            else setShowVirtue(false);
+                          }}
                           className="inline-flex items-center gap-1.5 text-sm font-medium text-primary/60 hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
                         >
                           <BookOpen size={16} />
@@ -833,7 +905,7 @@ export default function App() {
                         </button>
                       )}
                       <button 
-                        onClick={() => setShowShareMenu(true)}
+                        onClick={() => openModal(setShowShareMenu)}
                         className="inline-flex items-center gap-1.5 text-sm font-medium text-primary/60 hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
                       >
                         <Share2 size={16} />
@@ -916,7 +988,7 @@ export default function App() {
                     <div className="flex justify-between items-start">
                       <h3 className="text-2xl font-bold font-serif text-primary">فضل هذا الذكر</h3>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setShowShareMenu(true)} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors" title="مشاركة">
+                        <button onClick={() => openModal(setShowShareMenu)} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors" title="مشاركة">
                           <Share2 size={20} />
                         </button>
                         <button onClick={() => setShowVirtue(false)} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors">
@@ -1194,6 +1266,11 @@ export default function App() {
                     {currentDhikr.step && currentDhikr.target && currentDhikr.step !== currentDhikr.target && (
                       <span className="text-xs text-primary/70 mt-2 font-bold bg-primary/10 px-3 py-1 rounded-full">
                         القسم: {counterProgressValue === 0 && currentCount > 0 ? step : counterProgressValue} / {step}
+                      </span>
+                    )}
+                    {currentDhikr.target && (
+                      <span className="text-xs text-primary/60 mt-1 font-medium">
+                        الإنجاز: {currentCount} / {currentDhikr.target}
                       </span>
                     )}
                   </div>
