@@ -94,6 +94,17 @@ const normalizeArabic = (text: string) => {
     .replace(/ى/g, 'ي'); // Normalize Alef Maksura
 };
 
+let sharedAudioCtx: AudioContext | null = null;
+const getAudioContext = () => {
+  if (!sharedAudioCtx) {
+    sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  if (sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume();
+  }
+  return sharedAudioCtx;
+};
+
 export default function App() {
   const [view, setView] = useState<'main' | 'stats' | 'manage'>('main');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -102,14 +113,25 @@ export default function App() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showVirtue, setShowVirtue] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showSoundSettings, setShowSoundSettings] = useState(false);
   const [shareImageBlob, setShareImageBlob] = useState<Blob | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
   const [showList, setShowList] = useState(false);
   const [listFilter, setListFilter] = useState<'all' | 'favorites'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('tasbih_sound_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [alertEnabled, setAlertEnabled] = useState(() => {
+    const saved = localStorage.getItem('tasbih_alert_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  
   const [customTimerInput, setCustomTimerInput] = useState('');
+  const [initialTimeLeft, setInitialTimeLeft] = useState(60);
   const [fontSize, setFontSize] = useState(() => {
     const saved = localStorage.getItem('tasbih_font_size');
     return saved ? parseInt(saved, 10) : 36;
@@ -121,55 +143,70 @@ export default function App() {
   });
   const [autoAdvance, setAutoAdvance] = useState(() => {
     const saved = localStorage.getItem('tasbih_auto_advance');
-    return saved ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : true;
   });
 
-  // Handle back button on mobile
+  // Handle back button on mobile using history state
   useEffect(() => {
+    // Initialize state if not present
     if (!window.history.state) {
-      window.history.replaceState({ view: 'main', showList: false, showVirtue: false, showShareMenu: false }, '', window.location.pathname);
+      window.history.replaceState({ view: 'main', modal: null }, '');
     }
 
     const handlePopState = (e: PopStateEvent) => {
       const state = e.state;
       if (state) {
         setView(state.view || 'main');
-        setShowList(state.showList || false);
-        setShowVirtue(state.showVirtue || false);
-        setShowShareMenu(state.showShareMenu || false);
+        setShowList(state.modal === 'list');
+        setShowVirtue(state.modal === 'virtue');
+        setShowShareMenu(state.modal === 'share');
+        setShowSoundSettings(state.modal === 'sound');
       } else {
         setView('main');
         setShowList(false);
         setShowVirtue(false);
         setShowShareMenu(false);
+        setShowSoundSettings(false);
       }
     };
     
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const changeView = (newView: 'main' | 'stats' | 'manage') => {
-    if (newView !== 'main' && view === 'main') {
-      window.history.pushState({ view: newView, showList, showVirtue, showShareMenu }, '', `#${newView}`);
+    if (newView === view) return;
+    
+    if (newView === 'main') {
+      // If going to main, we can just push state or replace
+      window.history.pushState({ view: 'main', modal: null }, '');
+    } else {
+      if (view === 'main') {
+        window.history.pushState({ view: newView, modal: null }, '');
+      } else {
+        window.history.replaceState({ view: newView, modal: null }, '');
+      }
     }
     setView(newView);
   };
 
   const openModal = (setter: React.Dispatch<React.SetStateAction<boolean>>) => {
-    const nextState = { view, showList, showVirtue, showShareMenu };
-    let hash = '#modal';
-    if (setter === setShowList) { nextState.showList = true; hash = '#list'; }
-    if (setter === setShowVirtue) { nextState.showVirtue = true; hash = '#virtue'; }
-    if (setter === setShowShareMenu) { nextState.showShareMenu = true; hash = '#share'; }
-    window.history.pushState(nextState, '', hash);
+    let modalName = 'modal';
+    if (setter === setShowList) modalName = 'list';
+    if (setter === setShowVirtue) modalName = 'virtue';
+    if (setter === setShowShareMenu) modalName = 'share';
+    if (setter as any === setShowSoundSettings) modalName = 'sound';
+    
+    window.history.pushState({ view: view, modal: modalName }, '');
     setter(true);
   };
 
   const closeOverlay = () => {
-    if (view !== 'main' || showList || showVirtue || showShareMenu) {
-      window.history.back();
-    }
+    // We just go back in history, which will trigger popstate and close the modal
+    window.history.back();
   };
   
   // Custom Dhikr List
@@ -250,6 +287,14 @@ export default function App() {
     localStorage.setItem('tasbih_auto_advance', JSON.stringify(autoAdvance));
   }, [autoAdvance]);
 
+  useEffect(() => {
+    localStorage.setItem('tasbih_sound_enabled', JSON.stringify(soundEnabled));
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('tasbih_alert_enabled', JSON.stringify(alertEnabled));
+  }, [alertEnabled]);
+
   const prevCountRef = useRef(currentCount);
   const prevTimeRef = useRef(currentTimeSpent);
   const prevDhikrIdRef = useRef(currentDhikr?.id);
@@ -259,10 +304,10 @@ export default function App() {
     if (autoAdvance && mode === 'counter') {
       if (currentCount > 0 && currentCount !== prevCountRef.current && currentDhikr?.id === prevDhikrIdRef.current) {
         const target = currentDhikr?.target || 100;
-        if (currentCount === target) {
+        if (currentCount % target === 0) {
           const timeout = setTimeout(() => {
             setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
-          }, 800);
+          }, 1000);
           return () => clearTimeout(timeout);
         }
       }
@@ -274,13 +319,7 @@ export default function App() {
   useEffect(() => {
     if (autoAdvance && mode === 'timer') {
       if (currentTimeSpent > 0 && currentTimeSpent !== prevTimeRef.current && currentDhikr?.id === prevTimerDhikrIdRef.current) {
-        const timerTarget = 300;
-        if (currentTimeSpent === timerTarget) {
-          const timeout = setTimeout(() => {
-            setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
-          }, 800);
-          return () => clearTimeout(timeout);
-        }
+        // Auto-advance in timer mode is handled by the interval when timeLeft reaches 0
       }
     }
     prevTimeRef.current = currentTimeSpent;
@@ -295,59 +334,81 @@ export default function App() {
   }, [dhikrList.length, currentIndex]);
 
   const soundEnabledRef = useRef(soundEnabled);
+  const alertEnabledRef = useRef(alertEnabled);
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
-  }, [soundEnabled]);
+    alertEnabledRef.current = alertEnabled;
+  }, [soundEnabled, alertEnabled]);
 
   // Non-musical sound effect (simple beep)
   const playBeep = (type: 'click' | 'alarm' | 'approaching') => {
-    if (soundEnabledRef.current) {
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
+    if (type === 'click' && !soundEnabledRef.current) return;
+    if (type === 'approaching' && !alertEnabledRef.current) return;
+    if (type === 'alarm' && !soundEnabledRef.current && !alertEnabledRef.current) return;
+
+    try {
+      const audioCtx = getAudioContext();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      const now = audioCtx.currentTime;
+      
+      if (type === 'click') {
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, now);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.setTargetAtTime(0, now, 0.03);
+        oscillator.start(now);
+        oscillator.stop(now + 0.2);
+      } else if (type === 'approaching') {
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(880, now);
+        gainNode.gain.setValueAtTime(0, now);
         
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        oscillator.start(now);
         
-        if (type === 'click' || type === 'approaching') {
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-          gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
-          oscillator.start();
-          oscillator.stop(audioCtx.currentTime + 0.1);
-        } else if (type === 'alarm') {
-          // Double beep for alarm
-          oscillator.type = 'square';
-          oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-          gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-          
-          oscillator.start();
-          
-          // Beep 1
-          gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-          gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.2);
-          
-          // Beep 2
-          gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime + 0.4);
-          gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.6);
-          
-          oscillator.stop(audioCtx.currentTime + 0.6);
-        }
-      } catch (e) {
-        // Ignore audio context errors
+        gainNode.gain.linearRampToValueAtTime(0.05, now + 0.01);
+        gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+        
+        gainNode.gain.setValueAtTime(0, now + 0.1);
+        gainNode.gain.linearRampToValueAtTime(0.05, now + 0.11);
+        gainNode.gain.linearRampToValueAtTime(0, now + 0.15);
+        
+        oscillator.stop(now + 0.2);
+      } else if (type === 'alarm') {
+        // Double beep for alarm
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(600, now);
+        
+        oscillator.start(now);
+        
+        // Beep 1
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.2, now + 0.02);
+        gainNode.gain.linearRampToValueAtTime(0, now + 0.2);
+        
+        // Beep 2
+        gainNode.gain.setValueAtTime(0, now + 0.4);
+        gainNode.gain.linearRampToValueAtTime(0.2, now + 0.42);
+        gainNode.gain.linearRampToValueAtTime(0, now + 0.6);
+        
+        oscillator.stop(now + 0.65);
       }
+    } catch (e) {
+      // Ignore audio context errors
     }
     
     try {
       const vibrate = navigator.vibrate || (navigator as any).webkitVibrate || (navigator as any).mozVibrate || (navigator as any).msVibrate;
       if (vibrate) {
-        if (type === 'click') {
+        if (type === 'click' && soundEnabledRef.current) {
           vibrate.call(navigator, 30);
-        } else if (type === 'approaching') {
+        } else if (type === 'approaching' && alertEnabledRef.current) {
           vibrate.call(navigator, [100, 50, 100]);
-        } else {
+        } else if (type === 'alarm') {
           vibrate.call(navigator, [300, 100, 300]);
         }
       }
@@ -560,6 +621,13 @@ export default function App() {
             setIsTimerRunning(false);
             playBeep('alarm');
             clearInterval(interval);
+            if (autoAdvance) {
+              setTimeout(() => {
+                setCurrentIndex((idx) => (idx + 1) % dhikrList.length);
+                setTimeLeft(initialTimeLeft);
+                setIsTimerRunning(true);
+              }, 1000);
+            }
             return 0;
           }
           return prev - 1;
@@ -586,7 +654,7 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [mode, isTimerRunning, currentDhikr?.id]);
+  }, [mode, isTimerRunning, currentDhikr?.id, autoAdvance, dhikrList.length, initialTimeLeft]);
 
   // --- Statistics Calculations ---
   const getStatsForPeriod = (days: number) => {
@@ -862,11 +930,11 @@ export default function App() {
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button 
-            onClick={() => setSoundEnabled(!soundEnabled)}
+            onClick={() => openModal(setShowSoundSettings)}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
-            title={soundEnabled ? 'إيقاف الصوت' : 'تفعيل الصوت'}
+            title="إعدادات الصوت"
           >
-            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            {soundEnabled || alertEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
           <button 
             onClick={() => setMode(mode === 'counter' ? 'timer' : 'counter')}
@@ -1234,7 +1302,7 @@ export default function App() {
                       {[30, 60, 180, 300].map(s => (
                         <button 
                           key={s}
-                          onClick={() => { setTimeLeft(s); setIsTimerRunning(false); }}
+                          onClick={() => { setTimeLeft(s); setInitialTimeLeft(s); setIsTimerRunning(false); }}
                           className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${timeLeft === s ? 'bg-primary text-secondary border-primary shadow-md' : 'bg-secondary/50 text-primary/70 border-primary/20 hover:bg-primary/10'}`}
                         >
                           {s < 60 ? `${s}ث` : `${s/60}د`}
@@ -1253,6 +1321,7 @@ export default function App() {
                               const val = parseInt(customTimerInput);
                               if (val > 0) {
                                 setTimeLeft(val * 60);
+                                setInitialTimeLeft(val * 60);
                                 setIsTimerRunning(false);
                                 setCustomTimerInput('');
                               }
@@ -1262,6 +1331,7 @@ export default function App() {
                             const val = parseInt(customTimerInput);
                             if (val > 0) {
                               setTimeLeft(val * 60);
+                              setInitialTimeLeft(val * 60);
                               setIsTimerRunning(false);
                               setCustomTimerInput('');
                             }
