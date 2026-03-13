@@ -193,15 +193,12 @@ export default function App() {
     setView(newView);
   };
 
-  const openModal = (setter: React.Dispatch<React.SetStateAction<boolean>>) => {
-    let modalName = 'modal';
-    if (setter === setShowList) modalName = 'list';
-    if (setter === setShowVirtue) modalName = 'virtue';
-    if (setter === setShowShareMenu) modalName = 'share';
-    if (setter as any === setShowSoundSettings) modalName = 'sound';
-    
+  const openModal = (modalName: 'list' | 'virtue' | 'share' | 'sound') => {
     window.history.pushState({ view: view, modal: modalName }, '');
-    setter(true);
+    if (modalName === 'list') setShowList(true);
+    if (modalName === 'virtue') setShowVirtue(true);
+    if (modalName === 'share') setShowShareMenu(true);
+    if (modalName === 'sound') setShowSoundSettings(true);
   };
 
   const closeOverlay = () => {
@@ -440,7 +437,7 @@ export default function App() {
       };
     });
     
-    if (remaining >= 0 && remaining <= 2) {
+    if (remaining === 0) {
       playBeep('approaching');
     } else {
       playBeep('click');
@@ -900,7 +897,7 @@ export default function App() {
       <header className="w-full max-w-md flex justify-between items-center mb-4 z-10 glass-panel px-4 py-3 rounded-2xl">
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => openModal(setShowList)}
+            onClick={() => openModal('list')}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
             title="قائمة الأذكار"
           >
@@ -930,7 +927,7 @@ export default function App() {
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button 
-            onClick={() => openModal(setShowSoundSettings)}
+            onClick={() => openModal('sound')}
             className="p-2.5 rounded-xl hover:bg-primary/10 transition-colors"
             title="إعدادات الصوت"
           >
@@ -1028,7 +1025,7 @@ export default function App() {
                       {(currentDhikr.virtue || currentDhikr.hadith) && (
                         <button 
                           onClick={() => {
-                            if (!showVirtue) openModal(setShowVirtue);
+                            if (!showVirtue) openModal('virtue');
                             else closeOverlay();
                           }}
                           className="inline-flex items-center gap-1.5 text-sm font-medium text-primary/60 hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
@@ -1038,7 +1035,7 @@ export default function App() {
                         </button>
                       )}
                       <button 
-                        onClick={() => openModal(setShowShareMenu)}
+                        onClick={() => openModal('share')}
                         className="inline-flex items-center gap-1.5 text-sm font-medium text-primary/60 hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
                       >
                         <Share2 size={16} />
@@ -1053,6 +1050,56 @@ export default function App() {
                 <ChevronLeft size={24} />
               </button>
             </div>
+
+            {/* Sound Settings Modal */}
+            <AnimatePresence>
+              {showSoundSettings && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-md"
+                  onClick={closeOverlay}
+                >
+                  <motion.div 
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                    className="glass-panel rounded-3xl p-6 max-w-xs w-full shadow-2xl space-y-4 text-center"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <h3 className="text-xl font-bold font-serif mb-4">إعدادات الصوت</h3>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">صوت العد</span>
+                        <button
+                          onClick={() => setSoundEnabled(!soundEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${soundEnabled ? 'bg-primary' : 'bg-primary/20'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-secondary transition-transform ${soundEnabled ? 'left-1 translate-x-6' : 'left-1'}`} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">صوت التنبيهات</span>
+                        <button
+                          onClick={() => setAlertEnabled(!alertEnabled)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${alertEnabled ? 'bg-primary' : 'bg-primary/20'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-secondary transition-transform ${alertEnabled ? 'left-1 translate-x-6' : 'left-1'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={closeOverlay}
+                      className="mt-6 w-full py-3 bg-primary text-secondary rounded-xl font-medium shadow-md hover:bg-primary/90 transition-colors"
+                    >
+                      حسناً
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Share Menu Modal */}
             <AnimatePresence>
@@ -1121,7 +1168,7 @@ export default function App() {
                     <div className="flex justify-between items-start">
                       <h3 className="text-2xl font-bold font-serif text-primary">فضل هذا الذكر</h3>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => openModal(setShowShareMenu)} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors" title="مشاركة">
+                        <button onClick={() => openModal('share')} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors" title="مشاركة">
                           <Share2 size={20} />
                         </button>
                         <button onClick={closeOverlay} className="p-2 rounded-full hover:bg-primary/10 text-primary/60 hover:text-primary transition-colors">
