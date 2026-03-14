@@ -114,6 +114,7 @@ export default function App() {
   const [showVirtue, setShowVirtue] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [showSoundSettings, setShowSoundSettings] = useState(false);
+  const [showAutoAdvanceSettings, setShowAutoAdvanceSettings] = useState(false);
   const [shareImageBlob, setShareImageBlob] = useState<Blob | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
@@ -141,10 +142,21 @@ export default function App() {
     if (saved !== null) return JSON.parse(saved);
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
-  const [autoAdvance, setAutoAdvance] = useState(() => {
-    const saved = localStorage.getItem('tasbih_auto_advance');
-    return saved !== null ? JSON.parse(saved) : true;
+  const [autoAdvanceSettings, setAutoAdvanceSettings] = useState(() => {
+    const saved = localStorage.getItem('tasbih_auto_advance_settings');
+    if (saved) return JSON.parse(saved);
+    const oldSaved = localStorage.getItem('tasbih_auto_advance');
+    const isEnabled = oldSaved !== null ? JSON.parse(oldSaved) : true;
+    return {
+      counter: isEnabled,
+      timerTimeUp: isEnabled,
+      timerTargetReached: isEnabled
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('tasbih_auto_advance_settings', JSON.stringify(autoAdvanceSettings));
+  }, [autoAdvanceSettings]);
 
   // Handle back button on mobile using history state
   useEffect(() => {
@@ -161,12 +173,14 @@ export default function App() {
         setShowVirtue(state.modal === 'virtue');
         setShowShareMenu(state.modal === 'share');
         setShowSoundSettings(state.modal === 'sound');
+        setShowAutoAdvanceSettings(state.modal === 'autoAdvance');
       } else {
         setView('main');
         setShowList(false);
         setShowVirtue(false);
         setShowShareMenu(false);
         setShowSoundSettings(false);
+        setShowAutoAdvanceSettings(false);
       }
     };
     
@@ -193,12 +207,13 @@ export default function App() {
     setView(newView);
   };
 
-  const openModal = (modalName: 'list' | 'virtue' | 'share' | 'sound') => {
+  const openModal = (modalName: 'list' | 'virtue' | 'share' | 'sound' | 'autoAdvance') => {
     window.history.pushState({ view: view, modal: modalName }, '');
     if (modalName === 'list') setShowList(true);
     if (modalName === 'virtue') setShowVirtue(true);
     if (modalName === 'share') setShowShareMenu(true);
     if (modalName === 'sound') setShowSoundSettings(true);
+    if (modalName === 'autoAdvance') setShowAutoAdvanceSettings(true);
   };
 
   const closeOverlay = () => {
@@ -281,10 +296,6 @@ export default function App() {
   }, [fontSize]);
 
   useEffect(() => {
-    localStorage.setItem('tasbih_auto_advance', JSON.stringify(autoAdvance));
-  }, [autoAdvance]);
-
-  useEffect(() => {
     localStorage.setItem('tasbih_sound_enabled', JSON.stringify(soundEnabled));
   }, [soundEnabled]);
 
@@ -293,17 +304,27 @@ export default function App() {
   }, [alertEnabled]);
 
   const prevCountRef = useRef(currentCount);
-  const prevTimeRef = useRef(currentTimeSpent);
   const prevDhikrIdRef = useRef(currentDhikr?.id);
-  const prevTimerDhikrIdRef = useRef(currentDhikr?.id);
 
   useEffect(() => {
-    if (autoAdvance && mode === 'counter') {
+    const shouldAdvance = mode === 'counter' ? autoAdvanceSettings.counter : autoAdvanceSettings.timerTargetReached;
+    if (shouldAdvance) {
       if (currentCount > 0 && currentCount !== prevCountRef.current && currentDhikr?.id === prevDhikrIdRef.current) {
         const target = currentDhikr?.target || 100;
         if (currentCount % target === 0) {
+          if (mode === 'timer') {
+            setIsTimerRunning(false);
+          }
           const timeout = setTimeout(() => {
-            setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
+            setCurrentIndex((prev) => {
+              const nextIdx = (prev + 1) % dhikrList.length;
+              if (mode === 'timer') {
+                const nextDhikr = dhikrList[nextIdx];
+                setTimeLeft(nextDhikr?.defaultTimer || initialTimeLeft);
+                setIsTimerRunning(true);
+              }
+              return nextIdx;
+            });
           }, 1000);
           return () => clearTimeout(timeout);
         }
@@ -311,17 +332,7 @@ export default function App() {
     }
     prevCountRef.current = currentCount;
     prevDhikrIdRef.current = currentDhikr?.id;
-  }, [currentCount, autoAdvance, mode, currentDhikr, dhikrList.length]);
-
-  useEffect(() => {
-    if (autoAdvance && mode === 'timer') {
-      if (currentTimeSpent > 0 && currentTimeSpent !== prevTimeRef.current && currentDhikr?.id === prevTimerDhikrIdRef.current) {
-        // Auto-advance in timer mode is handled by the interval when timeLeft reaches 0
-      }
-    }
-    prevTimeRef.current = currentTimeSpent;
-    prevTimerDhikrIdRef.current = currentDhikr?.id;
-  }, [currentTimeSpent, autoAdvance, mode, currentDhikr, dhikrList.length]);
+  }, [currentCount, autoAdvanceSettings, mode, currentDhikr, dhikrList, initialTimeLeft]);
 
   // Ensure currentIndex is valid if list changes
   useEffect(() => {
@@ -461,7 +472,7 @@ export default function App() {
         }
       };
     });
-    setTimeLeft(60);
+    setTimeLeft(currentDhikr.defaultTimer || initialTimeLeft);
     setIsTimerRunning(false);
   };
 
@@ -618,11 +629,15 @@ export default function App() {
             setIsTimerRunning(false);
             playBeep('alarm');
             clearInterval(interval);
-            if (autoAdvance) {
+            if (autoAdvanceSettings.timerTimeUp) {
               setTimeout(() => {
-                setCurrentIndex((idx) => (idx + 1) % dhikrList.length);
-                setTimeLeft(initialTimeLeft);
-                setIsTimerRunning(true);
+                setCurrentIndex((idx) => {
+                  const nextIdx = (idx + 1) % dhikrList.length;
+                  const nextDhikr = dhikrList[nextIdx];
+                  setTimeLeft(nextDhikr?.defaultTimer || initialTimeLeft);
+                  setIsTimerRunning(true);
+                  return nextIdx;
+                });
               }, 1000);
             }
             return 0;
@@ -651,7 +666,7 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [mode, isTimerRunning, currentDhikr?.id, autoAdvance, dhikrList.length, initialTimeLeft]);
+  }, [mode, isTimerRunning, currentDhikr?.id, autoAdvanceSettings, dhikrList, initialTimeLeft]);
 
   // --- Statistics Calculations ---
   const getStatsForPeriod = (days: number) => {
@@ -967,9 +982,9 @@ export default function App() {
                 A+
               </button>
               <button 
-                onClick={() => setAutoAdvance(!autoAdvance)}
-                className={`px-4 h-10 flex items-center justify-center rounded-full glass-panel transition-colors text-sm font-bold ${autoAdvance ? 'bg-primary/10 text-primary border-primary/20' : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
-                title={autoAdvance ? 'إيقاف الانتقال التلقائي' : 'تفعيل الانتقال التلقائي'}
+                onClick={() => openModal('autoAdvance')}
+                className={`px-4 h-10 flex items-center justify-center rounded-full glass-panel transition-colors text-sm font-bold ${(autoAdvanceSettings.counter || autoAdvanceSettings.timerTimeUp || autoAdvanceSettings.timerTargetReached) ? 'bg-primary/10 text-primary border-primary/20' : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
+                title="إعدادات الانتقال التلقائي"
               >
                 الانتقال التلقائي
               </button>
@@ -1087,6 +1102,65 @@ export default function App() {
                           className={`w-12 h-6 rounded-full transition-colors relative ${alertEnabled ? 'bg-primary' : 'bg-primary/20'}`}
                         >
                           <div className={`absolute top-1 w-4 h-4 rounded-full bg-secondary transition-transform ${alertEnabled ? 'left-1 translate-x-6' : 'left-1'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={closeOverlay}
+                      className="mt-6 w-full py-3 bg-primary text-secondary rounded-xl font-medium shadow-md hover:bg-primary/90 transition-colors"
+                    >
+                      حسناً
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Auto Advance Settings Modal */}
+            <AnimatePresence>
+              {showAutoAdvanceSettings && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-md"
+                  onClick={closeOverlay}
+                >
+                  <motion.div 
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                    className="glass-panel rounded-3xl p-6 max-w-xs w-full shadow-2xl space-y-4"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <h3 className="text-xl font-bold font-serif mb-4 text-center">إعدادات الانتقال التلقائي</h3>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">في وضع العداد (عند اكتمال العدد)</span>
+                        <button
+                          onClick={() => setAutoAdvanceSettings(prev => ({ ...prev, counter: !prev.counter }))}
+                          className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${autoAdvanceSettings.counter ? 'bg-primary' : 'bg-primary/20'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-secondary transition-transform ${autoAdvanceSettings.counter ? 'left-1 translate-x-6' : 'left-1'}`} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">في وضع المؤقت (عند انتهاء الوقت)</span>
+                        <button
+                          onClick={() => setAutoAdvanceSettings(prev => ({ ...prev, timerTimeUp: !prev.timerTimeUp }))}
+                          className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${autoAdvanceSettings.timerTimeUp ? 'bg-primary' : 'bg-primary/20'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-secondary transition-transform ${autoAdvanceSettings.timerTimeUp ? 'left-1 translate-x-6' : 'left-1'}`} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">في وضع المؤقت (عند اكتمال العدد)</span>
+                        <button
+                          onClick={() => setAutoAdvanceSettings(prev => ({ ...prev, timerTargetReached: !prev.timerTargetReached }))}
+                          className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${autoAdvanceSettings.timerTargetReached ? 'bg-primary' : 'bg-primary/20'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-secondary transition-transform ${autoAdvanceSettings.timerTargetReached ? 'left-1 translate-x-6' : 'left-1'}`} />
                         </button>
                       </div>
                     </div>
@@ -1689,6 +1763,17 @@ function ManageDhikrView({
                       className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary min-h-[100px] resize-y transition-all"
                       dir="rtl"
                       placeholder="نص الحديث الشريف..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-primary/80 mb-1">المؤقت الافتراضي بالثواني (اختياري)</label>
+                    <input 
+                      type="number" 
+                      value={formData.defaultTimer || ''}
+                      onChange={e => setFormData({...formData, defaultTimer: parseInt(e.target.value) || undefined})}
+                      className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                      dir="ltr"
+                      placeholder="مثال: 60"
                     />
                   </div>
                   <div className="flex gap-3 pt-4 mt-2 border-t border-primary/10">

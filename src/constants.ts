@@ -7,6 +7,7 @@ export interface Dhikr {
   target?: number;
   step?: number;
   isFavorite?: boolean;
+  defaultTimer?: number;
 }
 
 export const DHIKR_LIST: Dhikr[] = [
