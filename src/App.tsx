@@ -105,11 +105,30 @@ const getAudioContext = () => {
   return sharedAudioCtx;
 };
 
+const getDefaultTimerForDhikr = (dhikr: Dhikr | null | undefined): number => {
+  if (!dhikr) return 60;
+  if (dhikr.defaultTimer) return dhikr.defaultTimer;
+  const target = dhikr.target || 100;
+  if (target > 30) return 300;
+  if (target >= 5 && target <= 30) return 120;
+  return 60;
+};
+
 export default function App() {
   const [view, setView] = useState<'main' | 'stats' | 'manage'>('main');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mode, setMode] = useState<'counter' | 'timer'>('counter');
-  const [timeLeft, setTimeLeft] = useState(60);
+  
+  const [dhikrList, setDhikrList] = useState<Dhikr[]>(() => {
+    try {
+      const saved = localStorage.getItem('tasbih_list');
+      return saved ? JSON.parse(saved) : INITIAL_DHIKR_LIST;
+    } catch {
+      return INITIAL_DHIKR_LIST;
+    }
+  });
+
+  const [timeLeft, setTimeLeft] = useState(() => getDefaultTimerForDhikr(dhikrList[0]));
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showVirtue, setShowVirtue] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -132,7 +151,7 @@ export default function App() {
   });
   
   const [customTimerInput, setCustomTimerInput] = useState('');
-  const [initialTimeLeft, setInitialTimeLeft] = useState(60);
+  const [initialTimeLeft, setInitialTimeLeft] = useState(() => getDefaultTimerForDhikr(dhikrList[0]));
   const [fontSize, setFontSize] = useState(() => {
     const saved = localStorage.getItem('tasbih_font_size');
     return saved ? parseInt(saved, 10) : 36;
@@ -221,16 +240,6 @@ export default function App() {
     window.history.back();
   };
   
-  // Custom Dhikr List
-  const [dhikrList, setDhikrList] = useState<Dhikr[]>(() => {
-    try {
-      const saved = localStorage.getItem('tasbih_list');
-      return saved ? JSON.parse(saved) : INITIAL_DHIKR_LIST;
-    } catch {
-      return INITIAL_DHIKR_LIST;
-    }
-  });
-
   // Persistent Stats
   const [dailyStats, setDailyStats] = useState<DailyStats>(() => {
     try {
@@ -320,7 +329,9 @@ export default function App() {
               const nextIdx = (prev + 1) % dhikrList.length;
               if (mode === 'timer') {
                 const nextDhikr = dhikrList[nextIdx];
-                setTimeLeft(nextDhikr?.defaultTimer || initialTimeLeft);
+                const defaultTime = getDefaultTimerForDhikr(nextDhikr);
+                setTimeLeft(defaultTime);
+                setInitialTimeLeft(defaultTime);
                 setIsTimerRunning(true);
               }
               return nextIdx;
@@ -472,18 +483,35 @@ export default function App() {
         }
       };
     });
-    setTimeLeft(currentDhikr.defaultTimer || initialTimeLeft);
+    setTimeLeft(getDefaultTimerForDhikr(currentDhikr));
+    setInitialTimeLeft(getDefaultTimerForDhikr(currentDhikr));
     setIsTimerRunning(false);
   };
 
   const nextDhikr = () => {
     if (dhikrList.length === 0) return;
-    setCurrentIndex((prev) => (prev + 1) % dhikrList.length);
+    setCurrentIndex((prev) => {
+      const nextIdx = (prev + 1) % dhikrList.length;
+      const nextDhikr = dhikrList[nextIdx];
+      const defaultTime = getDefaultTimerForDhikr(nextDhikr);
+      setTimeLeft(defaultTime);
+      setInitialTimeLeft(defaultTime);
+      setIsTimerRunning(false);
+      return nextIdx;
+    });
   };
 
   const prevDhikr = () => {
     if (dhikrList.length === 0) return;
-    setCurrentIndex((prev) => (prev - 1 + dhikrList.length) % dhikrList.length);
+    setCurrentIndex((prev) => {
+      const prevIdx = (prev - 1 + dhikrList.length) % dhikrList.length;
+      const prevDhikr = dhikrList[prevIdx];
+      const defaultTime = getDefaultTimerForDhikr(prevDhikr);
+      setTimeLeft(defaultTime);
+      setInitialTimeLeft(defaultTime);
+      setIsTimerRunning(false);
+      return prevIdx;
+    });
   };
 
   const handleShareText = async () => {
@@ -634,7 +662,9 @@ export default function App() {
                 setCurrentIndex((idx) => {
                   const nextIdx = (idx + 1) % dhikrList.length;
                   const nextDhikr = dhikrList[nextIdx];
-                  setTimeLeft(nextDhikr?.defaultTimer || initialTimeLeft);
+                  const defaultTime = getDefaultTimerForDhikr(nextDhikr);
+                  setTimeLeft(defaultTime);
+                  setInitialTimeLeft(defaultTime);
                   setIsTimerRunning(true);
                   return nextIdx;
                 });
@@ -1766,14 +1796,14 @@ function ManageDhikrView({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-primary/80 mb-1">المؤقت الافتراضي بالثواني (اختياري)</label>
+                    <label className="block text-sm font-medium text-primary/80 mb-1">المؤقت الافتراضي بالدقائق (اختياري)</label>
                     <input 
                       type="number" 
-                      value={formData.defaultTimer || ''}
-                      onChange={e => setFormData({...formData, defaultTimer: parseInt(e.target.value) || undefined})}
+                      value={formData.defaultTimer ? formData.defaultTimer / 60 : ''}
+                      onChange={e => setFormData({...formData, defaultTimer: parseInt(e.target.value) ? parseInt(e.target.value) * 60 : undefined})}
                       className="w-full p-3 border border-primary/20 rounded-xl bg-secondary/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                       dir="ltr"
-                      placeholder="مثال: 60"
+                      placeholder="مثال: 5"
                     />
                   </div>
                   <div className="flex gap-3 pt-4 mt-2 border-t border-primary/10">
