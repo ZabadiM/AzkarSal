@@ -488,6 +488,16 @@ export default function App() {
     setIsTimerRunning(false);
   };
 
+  const jumpToDhikr = (idx: number) => {
+    if (dhikrList.length === 0 || idx < 0 || idx >= dhikrList.length) return;
+    setCurrentIndex(idx);
+    const dhikr = dhikrList[idx];
+    const defaultTime = getDefaultTimerForDhikr(dhikr);
+    setTimeLeft(defaultTime);
+    setInitialTimeLeft(defaultTime);
+    setIsTimerRunning(false);
+  };
+
   const nextDhikr = () => {
     if (dhikrList.length === 0) return;
     setCurrentIndex((prev) => {
@@ -1579,12 +1589,16 @@ export default function App() {
       <footer className="w-full max-w-md text-center mt-8 z-10">
         {dhikrList.length > 0 && (
           <>
-            <div className="flex justify-center gap-2 mb-3">
+            <div className="flex justify-center flex-wrap px-4 mb-1">
               {dhikrList.map((_, idx) => (
-                <div 
+                <button 
                   key={idx}
-                  className={`h-1.5 rounded-full transition-all duration-500 ${idx === currentIndex ? 'w-8 bg-primary' : 'w-2 bg-primary/20'}`}
-                />
+                  onClick={() => jumpToDhikr(idx)}
+                  className="py-3 px-1.5 group cursor-pointer"
+                  aria-label={`الانتقال إلى الذكر ${idx + 1}`}
+                >
+                  <div className={`h-1.5 rounded-full transition-all duration-500 group-hover:bg-primary/50 ${idx === currentIndex ? 'w-8 bg-primary' : 'w-2 bg-primary/20'}`} />
+                </button>
               ))}
             </div>
             <p className="text-[11px] font-medium text-primary/50 uppercase tracking-[0.2em]">
